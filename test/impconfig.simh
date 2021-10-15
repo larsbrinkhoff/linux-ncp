@@ -57,7 +57,7 @@ DEPOSIT TTY TTIME 1000
 
 ;   Don't know for sure what SS2 does, but it appears to have something to do
 ; with the IMP startup.  Leave it ON for now...
-DEPOSIT CPU SS2 1
+DEPOSIT CPU SS2 0
 
 ; All done ....
 SET CPU HISTORY=65000

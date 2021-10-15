@@ -1,0 +1,154 @@
+/* Library for applications. */
+
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/un.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include "ncp.h"
+#include "wire.h"
+
+static int fd;
+static struct sockaddr_un addr;
+static uint8_t message[1000];
+
+static void cleanup (void)
+{
+  close (fd);
+  unlink (addr.sun_path);
+}
+
+int ncp_init (const char *path)
+{
+  fd = socket (AF_UNIX, SOCK_DGRAM, 0);
+  if (fd == -1)
+    return -1;
+  memset (&addr, 0, sizeof addr);
+  addr.sun_family = AF_UNIX;
+  strncpy (addr.sun_path, "/tmp/client", sizeof addr.sun_path - 1);
+  unlink (addr.sun_path);
+  if (bind (fd, (struct sockaddr *)&addr, sizeof addr) == -1)
+    return -1;
+  atexit (cleanup);
+
+  memset (&addr, 0, sizeof addr);
+  addr.sun_family = AF_UNIX;
+  if (path == NULL)
+    path = getenv ("NCP");
+  strncpy (addr.sun_path, path, sizeof addr.sun_path - 1);
+  if (connect (fd, (struct sockaddr *) &addr, sizeof addr) == -1)
+    return -1;
+
+  return 0;
+}
+
+static int size;
+
+static void type (uint8_t x)
+{
+  message[0] = x;
+  size = 1;
+}
+
+static void add (uint8_t x)
+{
+  message[size++] = x;
+}
+
+static int transact (void)
+{
+  int type = message[0];
+  ssize_t n;
+  if (!wire_check (type, size))
+    return -1;
+  if (send (fd, message, size, 0) != size)
+    return -1;
+  n = recv (fd, message, sizeof message, 0);
+  if (message[0] != type + 1)
+    return -1;
+  if (!wire_check (message[0], n))
+    return -1;
+  return n;
+}
+
+int ncp_echo (int host, int data, int *reply)
+{
+  type (WIRE_ECHO);
+  add (host);
+  add (data);
+  if (transact () == -1)
+    return -1;
+  if (message[1] != host)
+    return -1;
+  *reply = message[2];
+  return 0;
+}
+
+int ncp_open (int host, int socket, int *connection)
+{
+  type (WIRE_OPEN);
+  add (host);
+  add (socket);
+  if (transact () == -1)
+    return -1;
+  if (message[1] != host)
+    return -1;
+  if (message[2] != socket)
+    return -1;
+  *connection = message[3];
+  return 0;
+}
+
+int ncp_listen (int socket, int *host, int *connection)
+{
+  type (WIRE_LISTEN);
+  add (socket);
+  if (transact () == -1)
+    return -1;
+  if (message[2] != socket)
+    return -1;
+  *host = message[1];
+  *connection = message[3];
+  return 0;
+}
+
+int ncp_read (int connection, void *data, int *length)
+{
+  ssize_t n;
+  type (WIRE_READ);
+  add (connection);
+  n = transact ();
+  if (n == -1)
+    return -1;
+  if (message[1] != connection)
+    return -1;
+  memcpy (data, message + 2, n - 2);
+  return 0;
+}
+
+int ncp_write (int connection, void *data, int length)
+{
+  type (WIRE_WRITE);
+  add (connection);
+  memcpy (message + 2, data, length);
+  if (transact () == -1)
+    return -1;
+  if (message[1] != connection)
+    return -1;
+  return 0;
+}
+
+int ncp_close (int connection)
+{
+  type (WIRE_CLOSE);
+  add (connection);
+  if (transact () == -1)
+    return -1;
+  if (message[1] != connection)
+    return -1;
+  return 0;
+}

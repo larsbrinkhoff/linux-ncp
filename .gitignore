@@ -1,2 +1,6 @@
 *~
+*.o
+src/ncp
+src/libncp.a
+src/ping
 test/*.log
