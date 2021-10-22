@@ -9,6 +9,6 @@ quality implementation.  It's primarily used for testing the network.
 - [x] Send ECO message to another host, get ERP back.
 - [x] Application library for NCP.
 - [x] Send RFC and CLS messages to open and close connections.
-- [ ] Send data back and forth.
+- [x] Send data back and forth.
 - [ ] ???
 - [ ] Profit!

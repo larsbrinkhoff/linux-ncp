@@ -40,4 +40,12 @@ sleep 10
 kill $!
 grep 'NCP: Host 005 IMP cannot be reached' ncp2.log || fail
 
+echo "Test ICP and simple data transfer using the Finger protocol."
+NCP=ncp2 ../src/finser &
+PID=$!
+sleep 1
+NCP=ncp3 ../src/finger 002 &
+sleep 10
+kill $! $PID 2>/dev/null
+
 exit $RESULT

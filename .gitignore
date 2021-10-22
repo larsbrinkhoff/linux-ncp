@@ -3,4 +3,6 @@
 src/ncp
 src/libncp.a
 src/ping
+src/finger
+src/finser
 test/*.log
