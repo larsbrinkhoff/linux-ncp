@@ -24,6 +24,8 @@ static void cleanup (void)
 
 int ncp_init (const char *path)
 {
+  struct sockaddr_un server;
+
   fd = socket (AF_UNIX, SOCK_DGRAM, 0);
   if (fd == -1)
     return -1;
@@ -35,12 +37,12 @@ int ncp_init (const char *path)
     return -1;
   atexit (cleanup);
 
-  memset (&addr, 0, sizeof addr);
-  addr.sun_family = AF_UNIX;
+  memset (&server, 0, sizeof server);
+  server.sun_family = AF_UNIX;
   if (path == NULL)
     path = getenv ("NCP");
-  strncpy (addr.sun_path, path, sizeof addr.sun_path - 1);
-  if (connect (fd, (struct sockaddr *) &addr, sizeof addr) == -1)
+  strncpy (server.sun_path, path, sizeof server.sun_path - 1);
+  if (connect (fd, (struct sockaddr *) &server, sizeof server) == -1)
     return -1;
 
   return 0;
