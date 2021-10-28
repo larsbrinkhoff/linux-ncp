@@ -4,6 +4,8 @@ set -e
 
 RESULT=0
 
+trap "./arpanet.sh stop" EXIT INT QUIT
+
 fail() {
     echo FAILED
     RESULT=1
@@ -24,8 +26,6 @@ echo Starting ARPANET.   Allow 30 seconds for IMP network to settle.
 sleep 10
 
 echo "Test pinging another host."
-NCP=ncp2 ../src/ping 003 1 | grep 'One octet from host 003: 001' || fail
-
-./arpanet.sh stop
+NCP=ncp2 ../src/ping -c3 003 | grep 'Reply from host 003: seq=3' || fail
 
 exit $RESULT
