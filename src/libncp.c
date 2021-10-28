@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/un.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -22,6 +23,11 @@ static void cleanup (void)
   unlink (addr.sun_path);
 }
 
+static void quit (int x)
+{
+  exit (0);
+}
+
 int ncp_init (const char *path)
 {
   struct sockaddr_un server;
@@ -36,6 +42,9 @@ int ncp_init (const char *path)
   if (bind (fd, (struct sockaddr *)&addr, sizeof addr) == -1)
     return -1;
   atexit (cleanup);
+  signal (SIGINT, quit);
+  signal (SIGTERM, quit);
+  signal (SIGQUIT, quit);
 
   memset (&server, 0, sizeof server);
   server.sun_family = AF_UNIX;
