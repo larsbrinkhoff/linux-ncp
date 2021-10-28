@@ -144,7 +144,7 @@ static void send_imp (int flags, int type, int destination, int link, int id,
 
 static void send_leader_error (int subtype)
 {
-  send_imp (0, IMP_NOP, 0, 0, 0, subtype, NULL, 2);
+  send_imp (0, IMP_LEADER_ERROR, 0, 0, 0, subtype, NULL, 2);
 }
 
 static void send_nop (void)
@@ -644,14 +644,17 @@ static void process_imp (uint8_t *packet, int length)
 {
   int type;
   if (length < 2) {
+    fprintf (stderr, "NCP: leader too short.\n");
     send_leader_error (1);
     return;
   }
   type = packet[0] & 0x0F;
   if (type <= IMP_RESET)
     imp_messages[type] (packet, length);
-  else
+  else {
+    fprintf (stderr, "NCP: leader type bad.\n");
     send_leader_error (2);
+  }
 }
 
 static void send_nops (void)
