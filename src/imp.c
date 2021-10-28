@@ -146,6 +146,7 @@ void imp_receive_message (uint8_t *data, int *length)
 
   *length = 0;
 
+ loop:
   n = read (imp_sock, message, sizeof message);
   if (n == 0)
     return;
@@ -178,8 +179,9 @@ void imp_receive_message (uint8_t *data, int *length)
   }
   rx_sequence++;
 
-  *length = message[8] << 8 | message[9];
-  if (n != 2 * *length + 10)
+  x = message[8] << 8 | message[9];
+  *length += x;
+  if (n != 2 * x + 10)
     fprintf (stderr, "IMP: Receive bad length.\n");
 
   if (*length == 0)
@@ -195,11 +197,18 @@ void imp_receive_message (uint8_t *data, int *length)
     imp_imp_ready (imp_ready);
   }
 
-  (*length)--;
-  if (*length == 0)
-    return;
-
   memcpy (data, message + 12, n - 12);
+  data += n - 12;
+
+  fprintf (stderr, "IMP: Flags are %04X.\n", x);
+  if ((x & FLAG_LAST) == 0)
+    goto loop;
+
+  (*length)--;
+  if (*length == 0) {
+    fprintf (stderr, "IMP: Just flags.\n");
+    return;
+  }
 
   fprintf (stderr, "IMP: Receive #%u: type %d/%s, source %03o, %d words.\n",
            rx_sequence - 1, message[12] & 0x0F, type_name[message[12] & 0x0F],

@@ -818,7 +818,8 @@ int main (int argc, char **argv)
       if (imp_fd_isset (&rfds)) {
         memset (packet, 0, sizeof packet);
         imp_receive_message (packet, &n);
-        process_imp (packet, n);
+        if (n > 0)
+          process_imp (packet, n);
       }
       if (FD_ISSET (fd, &rfds)) {
         application ();
