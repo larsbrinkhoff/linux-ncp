@@ -592,11 +592,11 @@ static void process_host_dead (uint8_t *packet, int length)
   const char *reason;
   switch (packet[3] & 0x0F) {
   case 0: reason = "IMP cannot be reached"; break;
-  case 1: reason = "host is not up"; break;
-  case 3: reason = "host communication administratively prohibited"; break;
+  case 1: reason = "is not up"; break;
+  case 3: reason = "communication administratively prohibited"; break;
   default: reason = "dead, unknown reason"; break;
   }
-  fprintf (stderr, "NCP: Destination %03o %s.\n", packet[1], reason);
+  fprintf (stderr, "NCP: Host %03o %s.\n", packet[1], reason);
 }
 
 static void process_data_error (uint8_t *packet, int length)
