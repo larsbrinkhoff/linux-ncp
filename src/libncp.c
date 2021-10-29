@@ -1,6 +1,7 @@
 /* Library for applications. */
 
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -37,7 +38,8 @@ int ncp_init (const char *path)
     return -1;
   memset (&addr, 0, sizeof addr);
   addr.sun_family = AF_UNIX;
-  strncpy (addr.sun_path, "/tmp/client", sizeof addr.sun_path - 1);
+  snprintf (addr.sun_path, sizeof addr.sun_path - 1,
+            "/tmp/client.%u", getpid ());
   unlink (addr.sun_path);
   if (bind (fd, (struct sockaddr *)&addr, sizeof addr) == -1)
     return -1;
@@ -120,6 +122,8 @@ int ncp_listen (int socket, int *host, int *connection)
   add (socket);
   if (transact () == -1)
     return -1;
+  if (message[1] == 0)
+    return -1;
   if (message[2] != socket)
     return -1;
   *host = message[1];
@@ -132,12 +136,14 @@ int ncp_read (int connection, void *data, int *length)
   ssize_t n;
   type (WIRE_READ);
   add (connection);
+  add (*length);
   n = transact ();
   if (n == -1)
     return -1;
   if (message[1] != connection)
     return -1;
   memcpy (data, message + 2, n - 2);
+  *length = n - 2;
   return 0;
 }
 
@@ -145,7 +151,8 @@ int ncp_write (int connection, void *data, int length)
 {
   type (WIRE_WRITE);
   add (connection);
-  memcpy (message + 2, data, length);
+  memcpy (message + size, data, length);
+  size += length;
   if (transact () == -1)
     return -1;
   if (message[1] != connection)

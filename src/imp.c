@@ -25,14 +25,14 @@ static uint32_t rx_sequence, tx_sequence;
 static const char *type_name[] =
 {
   "REGULAR",  // 0
-  "ERROR",    // 1
+  "ER_LEAD",  // 1
   "DOWN",     // 2
   "BLOCKED",  // 3
   "NOP",      // 4
   "RFNM",     // 5
   "FULL",     // 6
   "DEAD",     // 7
-  "ERROR_ID", // 8
+  "ER_DATA",  // 8
   "INCOMPL",  // 9
   "RESET",    //10
   "???",      //11
@@ -110,14 +110,6 @@ void imp_send_message (uint8_t *data, int length)
   data[10] = imp_flags >> 8;
   data[11] = imp_flags | FLAG_LAST;
 
-#if 1
-  {
-    int i, n = 2 * length + 10;
-    for (i = 0; i < n; i+=2)
-      fprintf (stderr, " <<< %02X%02X\n", data[i], data[i+1]);
-  }
-#endif
-
   r = sendto (imp_sock, data, 2 * length + 10, 0,
               (struct sockaddr *)&destination, sizeof destination);
   if (r == -1)
@@ -180,7 +172,7 @@ void imp_receive_message (uint8_t *data, int *length)
   rx_sequence++;
 
   x = message[8] << 8 | message[9];
-  *length += x;
+  *length += x - 1;
   if (n != 2 * x + 10)
     fprintf (stderr, "IMP: Receive bad length.\n");
 
@@ -204,12 +196,6 @@ void imp_receive_message (uint8_t *data, int *length)
   if ((x & FLAG_LAST) == 0)
     goto loop;
 
-  (*length)--;
-  if (*length == 0) {
-    fprintf (stderr, "IMP: Just flags.\n");
-    return;
-  }
-
   fprintf (stderr, "IMP: Receive #%u: type %d/%s, source %03o, %d words.\n",
            rx_sequence - 1, message[12] & 0x0F, type_name[message[12] & 0x0F],
            message[13], *length);
@@ -217,14 +203,6 @@ void imp_receive_message (uint8_t *data, int *length)
     fprintf (stderr, "IMP: flags %02o, link %03o, id %02o, subtype %02o.\n",
              message[12] >> 4, message[14], message[15] >> 4,
              message[15] & 0x0F);
-
-#if 1
-  {
-    int i;
-    for (i = 0; i < n; i+=2)
-      fprintf (stderr, " >>> %02X%02X\n", message[i], message[i+1]);
-  }
-#endif
 }
 
 void imp_fd_set (fd_set *fdset)

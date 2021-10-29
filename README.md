@@ -8,7 +8,7 @@ quality implementation.  It's primarily used for testing the network.
 - [x] Exchange 1822 NOP messages between host NCP and IMP.
 - [x] Send ECO message to another host, get ERP back.
 - [x] Application library for NCP.
-- [ ] Send RFC and CLS messages to open and close connections.
+- [x] Send RFC and CLS messages to open and close connections.
 - [ ] Send data back and forth.
 - [ ] ???
 - [ ] Profit!
