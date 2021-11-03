@@ -42,6 +42,13 @@
 #define NCP_RRP     13
 #define NCP_MAX     NCP_RRP
 
+#define ERR_UNDEFINED   0 //Undefined.
+#define ERR_OPCODE      1 //Illegal opcode.
+#define ERR_SHORT       2 //Short parameter space.
+#define ERR_PARAM       3 //Bad parameters.
+#define ERR_SOCKET      4 //Request on a non-existent socket.
+#define ERR_CONNECT     5 //Socket (link) not connected.
+
 #define CONNECTIONS 20
 
 static int fd;
@@ -343,8 +350,11 @@ void ncp_nop (uint8_t destination)
 // Error.
 void ncp_err (uint8_t destination, uint8_t code, void *data, int length)
 {
-  memcpy (packet + 22, data, length);
-  send_ncp (destination, 8, length + 1, NCP_ERR);
+  packet[22] = code;
+  memcpy (packet + 23, data, length > 10 ? 10 : length);
+  if (length < 10)
+    memset (packet + 23 + length, 0, 10 - length);
+  send_ncp (destination, 8, 12, NCP_ERR);
 }
 
 static int process_nop (uint8_t source, uint8_t *data)
@@ -412,11 +422,16 @@ static int process_rts (uint8_t source, uint8_t *data)
   fprintf (stderr, "NCP: Recieved RTS %u:%u from %03o.\n",
            lsock, rsock, source);
 
+  if (data[8] < 2 || data[8] > 71) {
+    ncp_err (source, ERR_PARAM, data - 1, 10);
+    return 9;
+  }
+
   if (find_listen (lsock) == -1) {
     i = find_sockets (source, lsock, rsock);
     if (i == -1) {
       fprintf (stderr, "NCP: Not listening to %u, no outgoing RFC, rejecting.\n", lsock);
-      ncp_cls (source, lsock, rsock);
+      ncp_err (source, ERR_CONNECT, data - 1, 10);
       return 9;
     }
     fprintf (stderr, "NCP: Outgoing RFC socket %u.\n", lsock);
@@ -437,11 +452,6 @@ static int process_rts (uint8_t source, uint8_t *data)
     ncp_str (connection[i].host, lsock, rsock, connection[i].rcv.size);
     if (connection[i].rcv.link != -1) {
       fprintf (stderr, "NCP: Completing incoming RFC.\n");
-      fprintf (stderr, "connection %u, host %u,\n", i, connection[i].host);
-      fprintf (stderr, "  rcv lsock %u, rcv rsock %u,\n",
-               connection[i].rcv.lsock, connection[i].rcv.rsock);
-      fprintf (stderr, "  snd lsock %u, snd rsock %u,\n",
-               connection[i].snd.lsock, connection[i].snd.rsock);
       reply_listen (source, connection[i].snd.lsock, i);
     }
   } else {
@@ -464,11 +474,16 @@ static int process_str (uint8_t source, uint8_t *data)
   fprintf (stderr, "NCP: Recieved STR %u:%u from %03o.\n",
            lsock, rsock, source);
 
+  if (data[8] < 2 || data[8] > 71) {
+    ncp_err (source, ERR_PARAM, data - 1, 10);
+    return 9;
+  }
+
   if (find_listen (lsock) == -1) {
     i = find_sockets (source, lsock, rsock);
     if (i == -1) {
       fprintf (stderr, "NCP: Not listening to %u, no outgoing RFC, rejecting.\n", lsock);
-      ncp_cls (source, lsock, rsock);
+      ncp_err (source, ERR_CONNECT, data - 1, 10);
       return 9;
     }
     fprintf (stderr, "NCP: Outgoing RFC socket %u.\n", lsock);
@@ -489,11 +504,6 @@ static int process_str (uint8_t source, uint8_t *data)
     ncp_rts (connection[i].host, lsock, rsock, connection[i].rcv.link);
     if (connection[i].rcv.size != -1) {
       fprintf (stderr, "NCP: Completing incoming RFC.\n");
-      fprintf (stderr, "connection %u, host %u,\n", i, connection[i].host);
-      fprintf (stderr, "  rcv lsock %u, rcv rsock %u,\n",
-               connection[i].rcv.lsock, connection[i].rcv.rsock);
-      fprintf (stderr, "  snd lsock %u, snd rsock %u,\n",
-               connection[i].snd.lsock, connection[i].snd.rsock);
       reply_listen (source, connection[i].snd.lsock, i);
     }
   } else {
@@ -513,6 +523,10 @@ static int process_cls (uint8_t source, uint8_t *data)
   rsock = sock (&data[0]);
   lsock = sock (&data[4]);
   i = find_sockets (source, lsock, rsock);
+  if (i == -1) {
+    ncp_err (source, ERR_SOCKET, data - 1, 9);
+    return 8;
+  }
   if (connection[i].rcv.lsock == lsock)
     connection[i].rcv.lsock = connection[i].rcv.rsock = 0;
   if (connection[i].snd.lsock == lsock)
@@ -540,28 +554,56 @@ static int process_cls (uint8_t source, uint8_t *data)
 
 static int process_all (uint8_t source, uint8_t *data)
 {
-  fprintf (stderr, "NCP: Recieved ALL from %03o: %u, %u.\n",
-           source, 0, 0);
+  int i;
+  fprintf (stderr, "NCP: Recieved ALL from %03o, link %u.",
+           source, data[0]);
+  i = find_link (source, data[0]);
+  if (i == -1)
+    ncp_err (source, ERR_SOCKET, data - 1, 10);
   return 9;
 }
 
 static int process_gvb (uint8_t source, uint8_t *data)
 {
+  int i;
+  fprintf (stderr, "NCP: Recieved GBV from %03o, link %u.",
+           source, data[0]);
+  i = find_link (source, data[0]);
+  if (i == -1)
+    ncp_err (source, ERR_SOCKET, data - 1, 4);
   return 3;
 }
 
 static int process_ret (uint8_t source, uint8_t *data)
 {
+  int i;
+  fprintf (stderr, "NCP: Recieved RET from %03o, link %u.",
+           source, data[0]);
+  i = find_link (source, data[0]);
+  if (i == -1)
+    ncp_err (source, ERR_SOCKET, data - 1, 8);
   return 7;
 }
 
 static int process_inr (uint8_t source, uint8_t *data)
 {
+  int i;
+  fprintf (stderr, "NCP: Recieved INR from %03o, link %u.",
+           source, data[0]);
+  i = find_link (source, data[0]);
+  if (i == -1)
+    ncp_err (source, ERR_SOCKET, data - 1, 2);
   return 1;
 }
 
 static int process_ins (uint8_t source, uint8_t *data)
 {
+  int i;
+  fprintf (stderr, "NCP: Recieved INS from %03o, link %u.",
+           source, data[0]);
+  i = find_link (source, data[0]);
+  if (i == -1)
+    ncp_err (source, ERR_SOCKET, data - 1, 2);
   return 1;
 }
 
@@ -589,7 +631,23 @@ static int process_erp (uint8_t source, uint8_t *data)
 
 static int process_err (uint8_t source, uint8_t *data)
 {
-  fprintf (stderr, "NCP: recieved ERR code %03o from %03o.\n", *data, source);
+  int i;
+  const char *meaning;
+  switch (*data) {
+  case ERR_UNDEFINED: meaning = "Undefined"; break;
+  case ERR_OPCODE:    meaning = "Illegal opcode"; break;
+  case ERR_SHORT:     meaning = "Short parameter space"; break;
+  case ERR_PARAM:     meaning = "Bad parameters"; break;
+  case ERR_SOCKET:    meaning = "Request on a non-existent socket"; break;
+  case ERR_CONNECT:   meaning = "Socket (link) not connected"; break;
+  default: meaning = "Unknown"; break;
+  }
+  fprintf (stderr, "NCP: recieved ERR code %03o from %03o: %s",
+           *data, source, meaning);
+  fprintf (stderr, "NCP: error data:");
+  for (i = 1; i < 11; i++)
+    fprintf (stderr, " %03o", data[i]);
+  fprintf (stderr, "\n");
   return 11;
 }
 
@@ -632,16 +690,17 @@ static int (*ncp_messages[]) (uint8_t source, uint8_t *data) =
 
 static void process_ncp (uint8_t source, uint8_t *data, uint16_t count)
 {
-  int i = 0;
+  int i = 0, n;
   while (i < count) {
     uint8_t type = data[i++];
     if (type > NCP_MAX) {
-      ncp_err (source, 1, data - 1, 10);
+      ncp_err (source, ERR_OPCODE, data - 1, 10);
       return;
     }
-    fprintf (stderr, "NCP: process type %d/%s from %03o\n",
-             type, type_name[type], source);
-    i += ncp_messages[type] (source, &data[i]);
+    n = ncp_messages[type] (source, &data[i]);
+    if (i + n > count)
+      ncp_err (source, ERR_SHORT, data - 1, count - i + 1);
+    i += n;
   }
 }
 
