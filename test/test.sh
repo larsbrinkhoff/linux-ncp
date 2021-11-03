@@ -40,6 +40,9 @@ PID=$!
 sleep 1
 NCP=ncp3 ../src/finger 002 &
 sleep 10
-kill $! $PID 2>/dev/null
+kill $! $PID 2>/dev/null || :
+
+echo "Test RFC to socket without server."
+NCP=ncp3 ../src/finger 002
 
 exit $RESULT

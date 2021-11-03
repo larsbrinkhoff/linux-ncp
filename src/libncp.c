@@ -123,6 +123,8 @@ int ncp_open (int host, unsigned socket, int *connection)
     return -1;
   if (u32 (message + 2) != socket)
     return -1;
+  if (message[6] == 255)
+    return -2;
   *connection = message[6];
   return 0;
 }

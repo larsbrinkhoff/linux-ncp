@@ -542,6 +542,7 @@ static int process_cls (uint8_t source, uint8_t *data)
     // Remote confirmed closing.
     if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
       fprintf (stderr, "NCP: Connection %u confirmed closed.\n", i);
+      listening[i].sock = 0;
       destroy (i);
       reply_close (i);
     }
@@ -551,7 +552,7 @@ static int process_cls (uint8_t source, uint8_t *data)
     if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
       fprintf (stderr, "NCP: Connection %u closed by remote.\n", i);
       destroy (i);
-      // Maybe reply_open or reply_close.
+      reply_close (i);
     }
   }
 
@@ -561,7 +562,7 @@ static int process_cls (uint8_t source, uint8_t *data)
 static int process_all (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved ALL from %03o, link %u.",
+  fprintf (stderr, "NCP: Recieved ALL from %03o, link %u.\n",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
@@ -652,6 +653,7 @@ static int process_erp (uint8_t source, uint8_t *data)
 
 static int process_err (uint8_t source, uint8_t *data)
 {
+  uint32_t rsock;
   int i;
   const char *meaning;
   switch (*data) {
@@ -663,12 +665,25 @@ static int process_err (uint8_t source, uint8_t *data)
   case ERR_CONNECT:   meaning = "Socket (link) not connected"; break;
   default: meaning = "Unknown"; break;
   }
-  fprintf (stderr, "NCP: recieved ERR code %03o from %03o: %s",
+  fprintf (stderr, "NCP: recieved ERR code %03o from %03o: %s.\n",
            *data, source, meaning);
   fprintf (stderr, "NCP: error data:");
   for (i = 1; i < 11; i++)
     fprintf (stderr, " %03o", data[i]);
   fprintf (stderr, "\n");
+
+  if ((data[0] == ERR_SOCKET || data[0] == ERR_CONNECT) &&
+      (data[1] == NCP_RTS || data[1] == NCP_STR)) {
+    rsock = sock (data + 6);
+    i = find_sockets (source, sock (data + 2), rsock);
+    if (i != -1) {
+      if ((rsock & 1) == 0)
+        rsock--;
+      reply_open (source, rsock, 255);
+      destroy (i);
+    }
+  }
+
   return 11;
 }
 

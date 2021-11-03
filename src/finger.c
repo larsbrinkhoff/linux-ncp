@@ -27,8 +27,15 @@ int main (int argc, char **argv)
 
   printf ("Finger host %03o.\n", host);
 
-  if (ncp_open (host, 0117, &connection) == -1) {
+  switch (ncp_open (host, 0117, &connection)) {
+  case 0:
+    break;
+  case -1:
+  default:
     fprintf (stderr, "NCP open error.\n");
+    exit (1);
+  case -2:
+    fprintf (stderr, "Open refused.\n");
     exit (1);
   }
 
