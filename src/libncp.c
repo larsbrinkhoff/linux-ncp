@@ -171,6 +171,17 @@ int ncp_write (int connection, void *data, int length)
   return 0;
 }
 
+int ncp_interrupt (int connection)
+{
+  type (WIRE_INTERRUPT);
+  add (connection);
+  if (transact () == -1)
+    return -1;
+  if (message[1] != connection)
+    return -1;
+  return 0;
+}
+
 int ncp_close (int connection)
 {
   type (WIRE_CLOSE);

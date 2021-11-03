@@ -282,13 +282,15 @@ void ncp_gvb (uint8_t destination, uint8_t link, uint8_t fm, uint8_t fb)
 // Interrupt by receiver.
 void ncp_inr (uint8_t destination, uint8_t link)
 {
-  send_ncp (destination, 8, 0, NCP_INR);
+  packet[22] = link;
+  send_ncp (destination, 8, 2, NCP_INR);
 }
 
 // Interrupt by sender.
 void ncp_ins (uint8_t destination, uint8_t link)
 {
-  send_ncp (destination, 8, 0, NCP_INS);
+  packet[22] = link;
+  send_ncp (destination, 8, 2, NCP_INS);
 }
 
 // Close.
@@ -900,6 +902,13 @@ static void app_write (int n)
   reply_write (i);
 }
 
+static void app_interrupt (void)
+{
+  int i = app[1];
+  fprintf (stderr, "NCP: Application interrupt, connection %u.\n", i);
+  ncp_ins (connection[i].host, connection[i].snd.link);
+}
+
 static void app_close (void)
 {
   int i = app[1];
@@ -929,13 +938,14 @@ static void application (void)
   }
 
   switch (app[0]) {
-  case WIRE_ECHO:   app_echo (); break;
-  case WIRE_OPEN:   app_open (); break;
-  case WIRE_LISTEN: app_listen (); break;
-  case WIRE_READ:   app_read (); break;
-  case WIRE_WRITE:  app_write (n - 2); break;
-  case WIRE_CLOSE:  app_close (); break;
-  default:          fprintf (stderr, "NCP: bad application request.\n"); break;
+  case WIRE_ECHO:       app_echo (); break;
+  case WIRE_OPEN:       app_open (); break;
+  case WIRE_LISTEN:     app_listen (); break;
+  case WIRE_READ:       app_read (); break;
+  case WIRE_WRITE:      app_write (n - 2); break;
+  case WIRE_INTERRUPT:  app_interrupt (); break;
+  case WIRE_CLOSE:      app_close (); break;
+  default:              fprintf (stderr, "NCP: bad application request.\n"); break;
   }
 }
 
