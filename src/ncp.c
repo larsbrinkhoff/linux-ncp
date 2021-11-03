@@ -54,14 +54,14 @@ struct
   struct sockaddr_un client;
   socklen_t len;
   int host;
-  struct { int link, size, lsock, rsock; } rcv, snd;
+  struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
 } connection[CONNECTIONS];
 
 struct
 {
   struct sockaddr_un client;
   socklen_t len;
-  int sock;
+  uint32_t sock;
 } listening[CONNECTIONS];
 
 static const char *type_name[] =
@@ -123,7 +123,7 @@ static int find_sockets (int host, uint32_t lsock, uint32_t rsock)
   return -1;
 }
 
-static int find_listen (int socket)
+static int find_listen (uint32_t socket)
 {
   int i;
   for (i = 0; i < CONNECTIONS; i++) {
@@ -139,9 +139,9 @@ static int find_listen (int socket)
 static void destroy (int i)
 {
   connection[i].host = connection[i].rcv.link = connection[i].snd.link =
-    connection[i].snd.size = connection[i].rcv.size =
-    connection[i].rcv.lsock = connection[i].rcv.rsock =
-    connection[i].snd.lsock = connection[i].snd.rsock = -1;
+    connection[i].snd.size = connection[i].rcv.size = -1;
+  connection[i].rcv.lsock = connection[i].rcv.rsock =
+    connection[i].snd.lsock = connection[i].snd.rsock = 0;
 }
 
 static void send_imp (int flags, int type, int destination, int link, int id,
@@ -196,8 +196,8 @@ static void send_ncp (uint8_t destination, uint8_t byte, uint16_t count,
 }
 
 static int make_open (int host,
-                      int rcv_lsock, int rcv_rsock,
-                      int snd_lsock, int snd_rsock)
+                      uint32_t rcv_lsock, uint32_t rcv_rsock,
+                      uint32_t snd_lsock, uint32_t snd_rsock)
 {
   int i = find_link (-1, -1);
   if (i == -1) {
@@ -206,14 +206,10 @@ static int make_open (int host,
   }
 
   connection[i].host = host;
-  if (rcv_lsock != -1)
-    connection[i].rcv.lsock = rcv_lsock;
-  if (rcv_rsock != -1)
-    connection[i].rcv.rsock = rcv_rsock;
-  if (snd_lsock != -1)
-    connection[i].snd.lsock = snd_lsock;
-  if (snd_rsock != -1)
-    connection[i].snd.rsock = snd_rsock;
+  connection[i].rcv.lsock = rcv_lsock;
+  connection[i].rcv.rsock = rcv_rsock;
+  connection[i].snd.lsock = snd_lsock;
+  connection[i].snd.rsock = snd_rsock;
 
   return i;
 }
@@ -415,7 +411,7 @@ static int process_rts (uint8_t source, uint8_t *data)
   } else {
     i = find_socket (source, lsock + 1);
     if (i == -1) {
-      i = make_open (source, -1, -1, lsock, rsock);
+      i = make_open (source, 0, 0, lsock, rsock);
       fprintf (stderr, "NCP: Listening to %u: new connection %d.\n", lsock, i);
     } else {
       connection[i].snd.lsock = lsock;
@@ -467,7 +463,7 @@ static int process_str (uint8_t source, uint8_t *data)
   } else {
     i = find_socket (source, lsock - 1);
     if (i == -1) {
-      i = make_open (source, lsock, rsock, -1, -1);
+      i = make_open (source, lsock, rsock, 0, 0);
       fprintf (stderr, "NCP: Listening to %u: new connection %d.\n", lsock, i);
     } else {
       connection[i].rcv.lsock = lsock;
@@ -506,13 +502,13 @@ static int process_cls (uint8_t source, uint8_t *data)
   lsock = sock (&data[4]);
   i = find_sockets (source, lsock, rsock);
   if (connection[i].rcv.lsock == lsock)
-    connection[i].rcv.lsock = connection[i].rcv.rsock = -1;
+    connection[i].rcv.lsock = connection[i].rcv.rsock = 0;
   if (connection[i].snd.lsock == lsock)
-    connection[i].snd.lsock = connection[i].snd.rsock = -1;
+    connection[i].snd.lsock = connection[i].snd.rsock = 0;
 
   if (connection[i].snd.size == -1) {
     // Remote confirmed closing.
-    if (connection[i].rcv.lsock == -1 && connection[i].snd.lsock == -1) {
+    if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
       fprintf (stderr, "NCP: Connection %u confirmed closed.\n", i);
       destroy (i);
       reply_close (i);
@@ -520,7 +516,7 @@ static int process_cls (uint8_t source, uint8_t *data)
   } else {
     // Remote closed connection.
     ncp_cls (connection[i].host, lsock, rsock);
-    if (connection[i].rcv.lsock == -1 && connection[i].snd.lsock == -1) {
+    if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
       fprintf (stderr, "NCP: Connection %u closed by remote.\n", i);
       destroy (i);
       // Maybe reply_open or reply_close.
@@ -833,7 +829,7 @@ static void app_open (void)
            socket, socket+1, app[1]);
 
   // Initiate a connection.
-  i = make_open (app[1], 0300, socket, 0301, socket+1);
+  i = make_open (app[1], 1002, socket, 1003, socket+1);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].rcv.size = 8;  //Send byte size.
 
@@ -856,7 +852,7 @@ static void app_listen (void)
     reply_listen (0, socket, 0);
     return;
   }
-  i = find_listen (-1);
+  i = find_listen (0);
   if (i == -1) {
     fprintf (stderr, "NCP: Table full.\n");
     reply_listen (0, socket, 0);
@@ -956,7 +952,7 @@ void ncp_init (void)
 
   for (i = 0; i < CONNECTIONS; i ++) {
     destroy (i);
-    listening[i].sock = -1;
+    listening[i].sock = 0;
   }
 }
 
