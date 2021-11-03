@@ -41,8 +41,8 @@ case "$1" in
         stop 3 "^C"
         stop 4 "^C"
         screen -S arpanet -X quit
-        killall h316
-        killall ncp
+        pkill h316
+        pkill ncp
         rm -f ncp2 ncp3
         ;;
     *)
