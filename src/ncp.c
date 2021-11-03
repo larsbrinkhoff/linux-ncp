@@ -260,13 +260,23 @@ void ncp_all (uint8_t destination, uint8_t link, uint16_t msg_space, uint32_t bi
 // Return.
 void ncp_ret (uint8_t destination, uint8_t link, uint16_t msg_space, uint32_t bit_space)
 {
-  send_ncp (destination, 8, 0, NCP_RET);
+  packet[22] = link;
+  packet[23] = msg_space >> 16;
+  packet[24] = msg_space;
+  packet[25] = bit_space >> 24;
+  packet[26] = bit_space >> 16;
+  packet[27] = bit_space >> 8;
+  packet[28] = bit_space;
+  send_ncp (destination, 8, 8, NCP_RET);
 }
 
 // Give back.
 void ncp_gvb (uint8_t destination, uint8_t link, uint8_t fm, uint8_t fb)
 {
-  send_ncp (destination, 8, 0, NCP_GVB);
+  packet[22] = link;
+  packet[23] = fm;
+  packet[24] = fb;
+  send_ncp (destination, 8, 4, NCP_GVB);
 }
 
 // Interrupt by receiver.
