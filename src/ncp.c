@@ -354,25 +354,31 @@ static uint32_t sock (uint8_t *data)
   return x;
 }
 
-static void reply_open (uint8_t host, uint8_t socket, uint8_t connection)
+static void reply_open (uint8_t host, uint32_t socket, uint8_t connection)
 {
-  uint8_t reply[4];
+  uint8_t reply[7];
   reply[0] = WIRE_OPEN+1;
   reply[1] = host;
-  reply[2] = socket;
-  reply[3] = connection;
+  reply[2] = socket >> 24;
+  reply[3] = socket >> 16;
+  reply[4] = socket >> 8;
+  reply[5] = socket;
+  reply[6] = connection;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
 }
 
-static void reply_listen (uint8_t host, uint8_t socket, uint8_t connection)
+static void reply_listen (uint8_t host, uint32_t socket, uint8_t connection)
 {
-  uint8_t reply[4];
+  uint8_t reply[7];
   reply[0] = WIRE_LISTEN+1;
   reply[1] = host;
-  reply[2] = socket;
-  reply[3] = connection;
+  reply[2] = socket >> 24;
+  reply[3] = socket >> 16;
+  reply[4] = socket >> 8;
+  reply[5] = socket;
+  reply[6] = connection;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
@@ -819,13 +825,15 @@ static void app_echo (void)
 
 static void app_open (void)
 {
+  uint32_t socket;
   int i;
 
+  socket = app[2] << 24 | app[3] << 16 | app[4] << 8 | app[5];
   fprintf (stderr, "NCP: Application open sockets %u,%u on host %03o.\n",
-           app[2], app[2]+1, app[1]);
+           socket, socket+1, app[1]);
 
   // Initiate a connection.
-  i = make_open (app[1], 0300, app[2], 0301, app[2]+1);
+  i = make_open (app[1], 0300, socket, 0301, socket+1);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].rcv.size = 8;  //Send byte size.
 
@@ -838,20 +846,23 @@ static void app_open (void)
 
 static void app_listen (void)
 {
+  uint32_t socket;
   int i;
-  fprintf (stderr, "NCP: Application listen to socket %u.\n", app[1]);
-  if (find_listen (app[1]) != -1) {
-    fprintf (stderr, "NCP: Alreay listening to %d.\n", app[1]);
-    reply_listen (0, app[1], 0);
+
+  socket = app[1] << 24 | app[2] << 16 | app[3] << 8 | app[4];
+  fprintf (stderr, "NCP: Application listen to socket %u.\n", socket);
+  if (find_listen (socket) != -1) {
+    fprintf (stderr, "NCP: Alreay listening to %d.\n", socket);
+    reply_listen (0, socket, 0);
     return;
   }
   i = find_listen (-1);
   if (i == -1) {
     fprintf (stderr, "NCP: Table full.\n");
-    reply_listen (0, app[1], 0);
+    reply_listen (0, socket, 0);
     return;
   }
-  listening[i].sock = app[1];
+  listening[i].sock = socket;
 }
 
 static void app_read (void)

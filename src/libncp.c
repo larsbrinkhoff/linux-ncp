@@ -101,33 +101,44 @@ int ncp_echo (int host, int data, int *reply)
   return 0;
 }
 
-int ncp_open (int host, int socket, int *connection)
+static int u32 (uint8_t *data)
+{
+  return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+}
+
+int ncp_open (int host, unsigned socket, int *connection)
 {
   type (WIRE_OPEN);
   add (host);
+  add (socket >> 24);
+  add (socket >> 16);
+  add (socket >> 8);
   add (socket);
   if (transact () == -1)
     return -1;
   if (message[1] != host)
     return -1;
-  if (message[2] != socket)
+  if (u32 (message + 2) != socket)
     return -1;
-  *connection = message[3];
+  *connection = message[6];
   return 0;
 }
 
-int ncp_listen (int socket, int *host, int *connection)
+int ncp_listen (unsigned socket, int *host, int *connection)
 {
   type (WIRE_LISTEN);
+  add (socket >> 24);
+  add (socket >> 16);
+  add (socket >> 8);
   add (socket);
   if (transact () == -1)
     return -1;
   if (message[1] == 0)
     return -1;
-  if (message[2] != socket)
+  if (u32 (message + 2) != socket)
     return -1;
   *host = message[1];
-  *connection = message[3];
+  *connection = message[6];
   return 0;
 }
 
