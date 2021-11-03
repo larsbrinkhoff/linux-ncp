@@ -595,7 +595,13 @@ static int process_err (uint8_t source, uint8_t *data)
 
 static int process_rst (uint8_t source, uint8_t *data)
 {
+  int i;
   fprintf (stderr, "NCP: recieved RST from %03o.\n", source);
+  for (i = 0; i < CONNECTIONS; i++) {
+    if (connection[i].host != source)
+      continue;
+    destroy (i);
+  }
   ncp_rrp (source);
   return 0;
 }
