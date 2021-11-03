@@ -78,7 +78,22 @@ int main (int argc, char **argv)
 
   while (count != 0) {
     gettimeofday (&start, NULL);
-    if (ncp_echo (host, seq, &reply) == -1) {
+    switch (ncp_echo (host, seq, &reply)) {
+    case 0:
+      break;
+    case -2:
+      fprintf (stderr, "IMP cannot be reached.\n");
+      exit (1);
+      break;
+    case -3:
+      fprintf (stderr, "Host is not up.\n");
+      exit (1);
+      break;
+    case -5:
+      fprintf (stderr, "Communication administratively prohibited.\n");
+      exit (1);
+      break;
+    default:
       fprintf (stderr, "NCP echo error.\n");
       exit (1);
     }

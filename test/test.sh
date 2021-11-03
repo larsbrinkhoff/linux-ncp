@@ -29,16 +29,10 @@ echo "Test pinging another host."
 NCP=ncp2 ../src/ping -c3 003 | grep 'Reply from host 003: seq=3' || fail
 
 echo "Test pinging a dead host."
-NCP=ncp2 ../src/ping -c1 004 &
-sleep 10
-kill $!
-grep 'NCP: Host 004 is not up' ncp2.log || fail
+NCP=ncp2 ../src/ping -c1 004 && fail
 
 echo "Test pinging a dead IMP."
-NCP=ncp2 ../src/ping -c1 005 &
-sleep 10
-kill $!
-grep 'NCP: Host 005 IMP cannot be reached' ncp2.log || fail
+NCP=ncp2 ../src/ping -c1 005 && fail
 
 echo "Test ICP and simple data transfer using the Finger protocol."
 NCP=ncp2 ../src/finser &

@@ -98,7 +98,10 @@ int ncp_echo (int host, int data, int *reply)
   if (message[1] != host)
     return -1;
   *reply = message[2];
-  return 0;
+  if (message[3] == 0x10)
+    return 0;
+  else
+    return -message[3] - 2;
 }
 
 static int u32 (uint8_t *data)

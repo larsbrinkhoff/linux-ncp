@@ -26,6 +26,12 @@
 #define IMP_INCOMPL       9
 #define IMP_RESET        10
 
+#define LINK_CTL     0
+#define LINK_MIN     2
+#define LINK_MAX    71
+#define LINK_ECHO   72
+#define LINK_IP    155
+
 #define NCP_NOP      0
 #define NCP_RTS      1
 #define NCP_STR      2
@@ -422,7 +428,7 @@ static int process_rts (uint8_t source, uint8_t *data)
   fprintf (stderr, "NCP: Recieved RTS %u:%u from %03o.\n",
            lsock, rsock, source);
 
-  if (data[8] < 2 || data[8] > 71) {
+  if (data[8] < LINK_MIN || data[8] > LINK_MAX) {
     ncp_err (source, ERR_PARAM, data - 1, 10);
     return 9;
   }
@@ -474,7 +480,7 @@ static int process_str (uint8_t source, uint8_t *data)
   fprintf (stderr, "NCP: Recieved STR %u:%u from %03o.\n",
            lsock, rsock, source);
 
-  if (data[8] < 2 || data[8] > 71) {
+  if (data[8] < LINK_MIN || data[8] > LINK_MAX) {
     ncp_err (source, ERR_PARAM, data - 1, 10);
     return 9;
   }
@@ -615,17 +621,32 @@ static int process_eco (uint8_t source, uint8_t *data)
   return 1;
 }
 
+static void reply_echo (int i, uint8_t host, uint8_t data, uint8_t error)
+{
+  uint8_t reply[4];
+  reply[0] = WIRE_ECHO+1;
+  reply[1] = host;
+  reply[2] = data;
+  reply[3] = error;
+  if (sendto (fd, reply, sizeof reply, 0,
+              (struct sockaddr *)&connection[i].client,
+              connection[i].len) == -1)
+    fprintf (stderr, "NCP: sendto %s error: %s.\n",
+             connection[i].client.sun_path, strerror (errno));
+}
+
 static int process_erp (uint8_t source, uint8_t *data)
 {
-  uint8_t reply[3];
+  int i;
   fprintf (stderr, "NCP: recieved ERP %03o from %03o.\n",
            *data, source);
-  reply[0] = WIRE_ECHO+1;
-  reply[1] = source;
-  reply[2] = *data;
-  if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
-    fprintf (stderr, "NCP: sendto %s error: %s.\n",
-             client.sun_path, strerror (errno));
+  i = find_link (source, LINK_ECHO);
+  if (i == -1) {
+    fprintf (stderr, "NCP: No ongoing ECO.\n");
+    return 1;
+  }
+  reply_echo (i, source, *data, 0x10);
+  destroy (i);
   return 1;
 }
 
@@ -778,6 +799,7 @@ static void process_full (uint8_t *packet, int length)
 
 static void process_host_dead (uint8_t *packet, int length)
 {
+  int i;
   const char *reason;
   switch (packet[3] & 0x0F) {
   case 0: reason = "IMP cannot be reached"; break;
@@ -786,6 +808,12 @@ static void process_host_dead (uint8_t *packet, int length)
   default: reason = "dead, unknown reason"; break;
   }
   fprintf (stderr, "NCP: Host %03o %s.\n", packet[1], reason);
+
+  i = find_link (packet[1], LINK_ECHO);
+  if (i != -1) {
+    reply_echo (i, packet[1], 0, packet[3] & 0x0F);
+    destroy (i);
+  }
 }
 
 static void process_data_error (uint8_t *packet, int length)
@@ -892,7 +920,17 @@ static void ncp_imp_ready (int flag)
 
 static void app_echo (void)
 {
+  int i;
   fprintf (stderr, "NCP: Application echo.\n");
+  i = find_link (-1, -1);
+  if (i == -1) {
+    fprintf (stderr, "NCP: Table full.\n");
+    return;
+  }
+  connection[i].host = app[1];
+  connection[i].rcv.link = LINK_ECHO;
+  memcpy (&connection[i].client, &client, len);
+  connection[i].len = len;
   ncp_eco (app[1], app[2]);
 }
 
@@ -909,6 +947,8 @@ static void app_open (void)
   i = make_open (app[1], 1002, socket, 1003, socket+1);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].rcv.size = 8;  //Send byte size.
+  memcpy (&connection[i].client, &client, len);
+  connection[i].len = len;
 
   // Send RFC messages.
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
@@ -936,6 +976,8 @@ static void app_listen (void)
     return;
   }
   listening[i].sock = socket;
+  memcpy (&connection[i].client, &client, len);
+  connection[i].len = len;
 }
 
 static void app_read (void)

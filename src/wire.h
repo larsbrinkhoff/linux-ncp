@@ -12,7 +12,7 @@ static int wire_check (int type, int size)
 {
   switch (type) {
   case WIRE_ECHO:        return size == 3;
-  case WIRE_ECHO+1:      return size == 3;
+  case WIRE_ECHO+1:      return size == 4;
   case WIRE_OPEN:        return size == 6;
   case WIRE_OPEN+1:      return size == 7;
   case WIRE_LISTEN:      return size == 5;
