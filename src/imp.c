@@ -81,10 +81,15 @@ static void args (int argc, char **argv)
 static void make_socket (void)
 {
   struct sockaddr_in source;
+  int enable = 1;
 
   imp_sock = socket (AF_INET, SOCK_DGRAM, 0);
   if (imp_sock == -1)
     fatal ("socket");
+
+  if (setsockopt(imp_sock, SOL_SOCKET, SO_REUSEADDR,
+                 &enable, sizeof enable) != 0)
+    fatal ("setsockopt(SO_REUSEADDR)");
 
   source.sin_family = AF_INET;
   source.sin_addr.s_addr = INADDR_ANY;
