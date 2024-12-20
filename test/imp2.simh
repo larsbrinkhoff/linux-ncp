@@ -16,7 +16,9 @@ do impcode.simh
 
 ; Start up the modem links!
 echo Attaching modem links ...
+SET MI2 ENABLED
 ATTACH MI1 4421::4431
+ATTACH MI2 4421::4461
 
 ; Set up a host interface.
 echo Attaching host interface ...
