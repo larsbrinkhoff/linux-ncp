@@ -30,7 +30,6 @@
 #define LINK_CTL     0
 #define LINK_MIN     2
 #define LINK_MAX    71
-#define LINK_ECHO   72
 #define LINK_IP    155
 
 #define NCP_NOP      0
@@ -81,6 +80,15 @@ struct
   client_t client;
   uint32_t sock;
 } listening[CONNECTIONS];
+
+// Notes which hosts are considered alive.
+static struct
+{
+  unsigned flags;
+#define HOST_ALIVE   0001
+
+  client_t echo;
+} hosts[256];
 
 static const char *type_name[] =
 {
@@ -627,7 +635,7 @@ static int process_eco (uint8_t source, uint8_t *data)
   return 1;
 }
 
-static void reply_echo (int i, uint8_t host, uint8_t data, uint8_t error)
+static void reply_echo (uint8_t host, uint8_t data, uint8_t error)
 {
   uint8_t reply[4];
   reply[0] = WIRE_ECHO+1;
@@ -635,24 +643,19 @@ static void reply_echo (int i, uint8_t host, uint8_t data, uint8_t error)
   reply[2] = data;
   reply[3] = error;
   if (sendto (fd, reply, sizeof reply, 0,
-              (struct sockaddr *)&connection[i].client.addr,
-              connection[i].client.len) == -1)
+              (struct sockaddr *)&hosts[host].echo.addr,
+              hosts[host].echo.len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
-             connection[i].client.addr.sun_path, strerror (errno));
+             hosts[host].echo.addr.sun_path, strerror (errno));
 }
 
 static int process_erp (uint8_t source, uint8_t *data)
 {
-  int i;
   fprintf (stderr, "NCP: recieved ERP %03o from %03o.\n",
            *data, source);
-  i = find_link (source, LINK_ECHO);
-  if (i == -1) {
-    fprintf (stderr, "NCP: No ongoing ECO.\n");
-    return 1;
-  }
-  reply_echo (i, source, *data, 0x10);
-  destroy (i);
+  hosts[source].flags |= HOST_ALIVE;
+  reply_echo (source, *data, 0x10);
+  hosts[source].echo.len = 0;
   return 1;
 }
 
@@ -692,15 +695,37 @@ static int process_err (uint8_t source, uint8_t *data)
   return 11;
 }
 
-static int process_rst (uint8_t source, uint8_t *data)
+static void reset (void)
 {
   int i;
-  fprintf (stderr, "NCP: recieved RST from %03o.\n", source);
+  for (i = 0; i < CONNECTIONS; i ++) {
+    destroy (i);
+    listening[i].sock = 0;
+  }
+  memset (hosts, 0, sizeof hosts);
+}
+
+static void reset_host (int host)
+{
+  int i;
   for (i = 0; i < CONNECTIONS; i++) {
-    if (connection[i].host != source)
+    if (connection[i].host != host)
       continue;
     destroy (i);
   }
+}
+
+static int process_rst (uint8_t source, uint8_t *data)
+{
+  fprintf (stderr, "NCP: recieved RST from %03o.\n", source);
+  hosts[source].flags |= HOST_ALIVE;
+
+  if (hosts[source].echo.len > 0) {
+    reply_echo (source, 0, 0x10);
+    hosts[source].echo.len = 0;
+  }
+
+  reset_host(source);
   ncp_rrp (source);
   return 0;
 }
@@ -708,6 +733,7 @@ static int process_rst (uint8_t source, uint8_t *data)
 static int process_rrp (uint8_t source, uint8_t *data)
 {
   fprintf (stderr, "NCP: recieved RRP from %03o.\n", source);
+  hosts[source].flags |= HOST_ALIVE;
   return 0;
 }
 
@@ -819,21 +845,24 @@ static void process_full (uint8_t *packet, int length)
 
 static void process_host_dead (uint8_t *packet, int length)
 {
-  int i;
   const char *reason;
+  uint8_t host = packet[1];
+
   switch (packet[3] & 0x0F) {
   case 0: reason = "IMP cannot be reached"; break;
   case 1: reason = "is not up"; break;
   case 3: reason = "communication administratively prohibited"; break;
   default: reason = "dead, unknown reason"; break;
   }
-  fprintf (stderr, "NCP: Host %03o %s.\n", packet[1], reason);
+  fprintf (stderr, "NCP: Host %03o %s.\n", host, reason);
 
-  i = find_link (packet[1], LINK_ECHO);
-  if (i != -1) {
-    reply_echo (i, packet[1], 0, packet[3] & 0x0F);
-    destroy (i);
+  if (hosts[host].echo.len > 0) {
+    reply_echo (host, 0, packet[3] & 0x0F);
+    hosts[host].echo.len = 0;
   }
+
+  hosts[host].flags &= ~HOST_ALIVE;
+  reset_host(host);
 }
 
 static void process_data_error (uint8_t *packet, int length)
@@ -916,6 +945,8 @@ static void send_nops (void)
 static void ncp_reset (int flap)
 {
   fprintf (stderr, "NCP: Reset.\n");
+  reset();
+
   if (flap) {
     fprintf (stderr, "NCP: Flap host ready.\n");
     imp_host_ready (0);
@@ -940,31 +971,38 @@ static void ncp_imp_ready (int flag)
 
 static void app_echo (void)
 {
-  int i;
+  uint8_t host = app[1];
+
   fprintf (stderr, "NCP: Application echo.\n");
-  i = find_link (-1, -1);
-  if (i == -1) {
-    fprintf (stderr, "NCP: Table full.\n");
+
+  if (hosts[host].echo.len > 0) {
+    reply_echo (host, 0, 0x20);
     return;
   }
-  connection[i].host = app[1];
-  connection[i].rcv.link = LINK_ECHO;
-  memcpy (&connection[i].client.addr, &client, len);
-  connection[i].client.len = len;
-  ncp_eco (app[1], app[2]);
+
+  memcpy (&hosts[host].echo.addr, &client, len);
+  hosts[host].echo.len = len;
+  ncp_eco (host, app[2]);
 }
 
 static void app_open (void)
 {
   uint32_t socket;
+  uint8_t host = app[1];
   int i;
 
   socket = app[2] << 24 | app[3] << 16 | app[4] << 8 | app[5];
   fprintf (stderr, "NCP: Application open sockets %u,%u on host %03o.\n",
-           socket, socket+1, app[1]);
+           socket, socket+1, host);
+
+  if ((hosts[host].flags & HOST_ALIVE) == 0) {
+    // We haven't communicated with this host yet.
+    ncp_rst (host);
+    // Wait for RRP.
+  }
 
   // Initiate a connection.
-  i = make_open (app[1], 1002, socket, 1003, socket+1);
+  i = make_open (host, 1002, socket, 1003, socket+1);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].rcv.size = 8;  //Send byte size.
   memcpy (&connection[i].client.addr, &client, len);
@@ -1089,7 +1127,6 @@ static void sigcleanup (int sig)
 void ncp_init (void)
 {
   char *path;
-  int i;
 
   fd = socket (AF_UNIX, SOCK_DGRAM, 0);
   memset (&server, 0, sizeof server);
@@ -1104,11 +1141,6 @@ void ncp_init (void)
   signal (SIGQUIT, sigcleanup);
   signal (SIGTERM, sigcleanup);
   atexit (cleanup);
-
-  for (i = 0; i < CONNECTIONS; i ++) {
-    destroy (i);
-    listening[i].sock = 0;
-  }
 }
 
 int main (int argc, char **argv)
