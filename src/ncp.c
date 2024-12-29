@@ -450,7 +450,7 @@ static int process_rts (uint8_t source, uint8_t *data)
     i = find_sockets (source, lsock, rsock);
     if (i == -1) {
       fprintf (stderr, "NCP: Not listening to %u, no outgoing RFC, rejecting.\n", lsock);
-      ncp_err (source, ERR_CONNECT, data - 1, 10);
+      ncp_cls (source, lsock, rsock);
       return 9;
     }
     fprintf (stderr, "NCP: Outgoing RFC socket %u.\n", lsock);
@@ -502,7 +502,7 @@ static int process_str (uint8_t source, uint8_t *data)
     i = find_sockets (source, lsock, rsock);
     if (i == -1) {
       fprintf (stderr, "NCP: Not listening to %u, no outgoing RFC, rejecting.\n", lsock);
-      ncp_err (source, ERR_CONNECT, data - 1, 10);
+      ncp_cls (source, lsock, rsock);
       return 9;
     }
     fprintf (stderr, "NCP: Outgoing RFC socket %u.\n", lsock);
