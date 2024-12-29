@@ -63,18 +63,22 @@ static struct sockaddr_un server;
 static struct sockaddr_un client;
 static socklen_t len;
 
+typedef struct
+{ 
+  struct sockaddr_un addr;
+  socklen_t len;
+} client_t;
+
 struct
 {
-  struct sockaddr_un client;
-  socklen_t len;
+  client_t client;
   int host;
   struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
 } connection[CONNECTIONS];
 
 struct
 {
-  struct sockaddr_un client;
-  socklen_t len;
+  client_t client;
   uint32_t sock;
 } listening[CONNECTIONS];
 
@@ -631,10 +635,10 @@ static void reply_echo (int i, uint8_t host, uint8_t data, uint8_t error)
   reply[2] = data;
   reply[3] = error;
   if (sendto (fd, reply, sizeof reply, 0,
-              (struct sockaddr *)&connection[i].client,
-              connection[i].len) == -1)
+              (struct sockaddr *)&connection[i].client.addr,
+              connection[i].client.len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
-             connection[i].client.sun_path, strerror (errno));
+             connection[i].client.addr.sun_path, strerror (errno));
 }
 
 static int process_erp (uint8_t source, uint8_t *data)
@@ -945,8 +949,8 @@ static void app_echo (void)
   }
   connection[i].host = app[1];
   connection[i].rcv.link = LINK_ECHO;
-  memcpy (&connection[i].client, &client, len);
-  connection[i].len = len;
+  memcpy (&connection[i].client.addr, &client, len);
+  connection[i].client.len = len;
   ncp_eco (app[1], app[2]);
 }
 
@@ -963,8 +967,8 @@ static void app_open (void)
   i = make_open (app[1], 1002, socket, 1003, socket+1);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].rcv.size = 8;  //Send byte size.
-  memcpy (&connection[i].client, &client, len);
-  connection[i].len = len;
+  memcpy (&connection[i].client.addr, &client, len);
+  connection[i].client.len = len;
 
   // Send RFC messages.
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
@@ -992,8 +996,8 @@ static void app_listen (void)
     return;
   }
   listening[i].sock = socket;
-  memcpy (&connection[i].client, &client, len);
-  connection[i].len = len;
+  memcpy (&connection[i].client.addr, &client, len);
+  connection[i].client.len = len;
 }
 
 static void app_read (void)
