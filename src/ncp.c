@@ -88,6 +88,7 @@ static struct
 #define HOST_ALIVE   0001
 
   client_t echo;
+  int outstanding_rfnm;
 } hosts[256];
 
 static const char *type_name[] =
@@ -188,6 +189,9 @@ static void send_imp (int flags, int type, int destination, int link, int id,
                (packet[i] << 8) | packet[i+1], packet[i], packet[i+1]);
   }
 #endif
+
+  if (type == IMP_REGULAR)
+    hosts[destination].outstanding_rfnm++;
 
   imp_send_message (packet, words);
 }
@@ -834,8 +838,10 @@ static void process_imp_nop (uint8_t *packet, int length)
 
 static void process_rfnm (uint8_t *packet, int length)
 {
+  uint8_t host = packet[1];
   fprintf (stderr, "NCP: Ready for next message to host %03o link %u.\n",
-           packet[1], packet[2]);
+           host, packet[2]);
+  hosts[host].outstanding_rfnm--;
 }
 
 static void process_full (uint8_t *packet, int length)
