@@ -5,4 +5,5 @@ src/libncp.a
 src/ping
 src/finger
 src/finser
+src/telnet
 test/*.log
