@@ -268,4 +268,6 @@ int main (int argc, char **argv)
     telnet_client (host, sock, new);
   else if (server)
     telnet_server (sock, new);
+
+  return 0;
 }
