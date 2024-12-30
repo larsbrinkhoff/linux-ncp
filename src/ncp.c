@@ -442,7 +442,7 @@ static int process_rts (uint8_t source, uint8_t *data)
   rsock = sock (&data[0]);
   lsock = sock (&data[4]);
 
-  fprintf (stderr, "NCP: Recieved RTS %u:%u from %03o.\n",
+  fprintf (stderr, "NCP: Received RTS %u:%u from %03o.\n",
            lsock, rsock, source);
 
   if (data[8] < LINK_MIN || data[8] > LINK_MAX) {
@@ -494,7 +494,7 @@ static int process_str (uint8_t source, uint8_t *data)
   rsock = sock (&data[0]);
   lsock = sock (&data[4]);
 
-  fprintf (stderr, "NCP: Recieved STR %u:%u from %03o.\n",
+  fprintf (stderr, "NCP: Received STR %u:%u from %03o.\n",
            lsock, rsock, source);
 
   if (data[8] < LINK_MIN || data[8] > LINK_MAX) {
@@ -579,7 +579,7 @@ static int process_cls (uint8_t source, uint8_t *data)
 static int process_all (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved ALL from %03o, link %u.\n",
+  fprintf (stderr, "NCP: Received ALL from %03o, link %u.\n",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
@@ -590,7 +590,7 @@ static int process_all (uint8_t source, uint8_t *data)
 static int process_gvb (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved GBV from %03o, link %u.",
+  fprintf (stderr, "NCP: Received GBV from %03o, link %u.",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
@@ -601,7 +601,7 @@ static int process_gvb (uint8_t source, uint8_t *data)
 static int process_ret (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved RET from %03o, link %u.",
+  fprintf (stderr, "NCP: Received RET from %03o, link %u.",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
@@ -612,7 +612,7 @@ static int process_ret (uint8_t source, uint8_t *data)
 static int process_inr (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved INR from %03o, link %u.",
+  fprintf (stderr, "NCP: Received INR from %03o, link %u.",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
@@ -623,7 +623,7 @@ static int process_inr (uint8_t source, uint8_t *data)
 static int process_ins (uint8_t source, uint8_t *data)
 {
   int i;
-  fprintf (stderr, "NCP: Recieved INS from %03o, link %u.",
+  fprintf (stderr, "NCP: Received INS from %03o, link %u.",
            source, data[0]);
   i = find_link (source, data[0]);
   if (i == -1)
