@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -1076,6 +1077,11 @@ static void cleanup (void)
   unlink (server.sun_path);
 }
 
+static void sigcleanup (int sig)
+{
+  cleanup ();
+}
+
 void ncp_init (void)
 {
   char *path;
@@ -1090,6 +1096,9 @@ void ncp_init (void)
     fprintf (stderr, "NCP: bind error: %s.\n", strerror (errno));
     exit (1);
   }
+  signal (SIGINT, sigcleanup);
+  signal (SIGQUIT, sigcleanup);
+  signal (SIGTERM, sigcleanup);
   atexit (cleanup);
 
   for (i = 0; i < CONNECTIONS; i ++) {
