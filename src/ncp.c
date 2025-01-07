@@ -15,6 +15,10 @@
 #include "imp.h"
 #include "wire.h"
 
+#define RFNM_TIMEOUT   10
+#define RRP_TIMEOUT    20
+#define ERP_TIMEOUT    20
+
 #define IMP_REGULAR       0
 #define IMP_LEADER_ERROR  1
 #define IMP_DOWN          2
@@ -71,6 +75,7 @@ static int fd;
 static struct sockaddr_un server;
 static struct sockaddr_un client;
 static socklen_t len;
+static unsigned long time_tick;
 
 typedef struct
 { 
@@ -87,8 +92,10 @@ struct
   struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
   void (*rrp_callback) (int);
   void (*rrp_timeout) (int);
+  unsigned long rrp_time;
   void (*rfnm_callback) (int);
   void (*rfnm_timeout) (int);
+  unsigned long rfnm_time;
 } connection[CONNECTIONS];
 
 struct
@@ -104,6 +111,7 @@ static struct
 #define HOST_ALIVE   0001
 
   client_t echo;
+  unsigned long erp_time;
   int outstanding_rfnm;
 } hosts[256];
 
@@ -132,6 +140,7 @@ static void when_rrp (int i, void (*cb) (int), void (*to) (int))
 {
   connection[i].rrp_callback = cb;
   connection[i].rrp_timeout = to;
+  connection[i].rrp_time = time_tick + RRP_TIMEOUT;
 }
 
 static void check_rrp (int host)
@@ -154,6 +163,7 @@ static void when_rfnm (int i, void (*cb) (int), void (*to) (int))
 {
   connection[i].rfnm_callback = cb;
   connection[i].rfnm_timeout = to;
+  connection[i].rfnm_time = time_tick + RFNM_TIMEOUT;
 }
 
 static void check_rfnm (int host)
@@ -314,6 +324,8 @@ static int make_open (int host,
   connection[i].snd.lsock = snd_lsock;
   connection[i].snd.rsock = snd_rsock;
   connection[i].flags = 0;
+  connection[i].rrp_time = time_tick - 1;
+  connection[i].rfnm_time = time_tick - 1;
 
   return i;
 }
@@ -1272,6 +1284,7 @@ static void app_echo (void)
 
   memcpy (&hosts[host].echo.addr, &client, len);
   hosts[host].echo.len = len;
+  hosts[host].erp_time = time_tick + ERP_TIMEOUT;
   ncp_eco (host, app[2]);
 }
 
@@ -1422,6 +1435,37 @@ static void application (void)
   }
 }
 
+static void tick (void)
+{
+  void (*to) (int);
+  int i;
+  time_tick++;
+  for (i = 0; i < CONNECTIONS; i++) {
+    to = connection[i].rrp_timeout;
+    if (to != NULL && connection[i].rrp_time == time_tick) {
+      connection[i].rrp_callback = NULL;
+      connection[i].rrp_timeout = NULL;
+      connection[i].rrp_time = time_tick - 1;
+      to (i);
+    }
+    to = connection[i].rfnm_timeout;
+    if (to != NULL && connection[i].rfnm_time == time_tick) {
+      connection[i].rfnm_callback = NULL;
+      connection[i].rfnm_timeout = NULL;
+      connection[i].rrp_time = time_tick - 1;
+      to (i);
+    }
+  }
+  for (i = 0; i < 256; i++) {
+    if (hosts[i].echo.len == 0)
+      continue;
+    if (hosts[i].erp_time != time_tick)
+      continue;
+    reply_echo (i, 0, 0x20);
+    hosts[i].echo.len = 0;
+  }
+}
+
 static void cleanup (void)
 {
   unlink (server.sun_path);
@@ -1449,6 +1493,7 @@ void ncp_init (void)
   signal (SIGQUIT, sigcleanup);
   signal (SIGTERM, sigcleanup);
   atexit (cleanup);
+  time_tick = 0;
 }
 
 int main (int argc, char **argv)
@@ -1461,13 +1506,20 @@ int main (int argc, char **argv)
   for (;;) {
     int n;
     fd_set rfds;
+    struct timeval tv;
     FD_ZERO (&rfds);
     FD_SET (fd, &rfds);
     imp_fd_set (&rfds);
-    n = select (33, &rfds, NULL, NULL, NULL);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    n = select (33, &rfds, NULL, NULL, &tv);
     if (n == -1)
       fprintf (stderr, "NCP: select error.\n");
-    else if (n > 0) {
+    else if (n == 0) {
+      tick ();
+      tv.tv_sec = 1;
+      tv.tv_usec = 0;
+    } else {
       if (imp_fd_isset (&rfds)) {
         memset (packet, 0, sizeof packet);
         imp_receive_message (packet, &n);
