@@ -86,7 +86,9 @@ struct
   int listen;
   struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
   void (*rrp_callback) (int);
+  void (*rrp_timeout) (int);
   void (*rfnm_callback) (int);
+  void (*rfnm_timeout) (int);
 } connection[CONNECTIONS];
 
 struct
@@ -126,9 +128,10 @@ static const char *type_name[] =
 static uint8_t packet[200];
 static uint8_t app[200];
 
-static void when_rrp (int i, void (*cb) (int))
+static void when_rrp (int i, void (*cb) (int), void (*to) (int))
 {
   connection[i].rrp_callback = cb;
+  connection[i].rrp_timeout = to;
 }
 
 static void check_rrp (int host)
@@ -138,17 +141,19 @@ static void check_rrp (int host)
   for (i = 0; i < CONNECTIONS; i++) {
     if (connection[i].host != host)
       continue;
-    if (connection[i].rrp_callback == NULL)
-      continue;
     cb = connection[i].rrp_callback;
+    if (cb == NULL)
+      continue;
     connection[i].rrp_callback = NULL;
+    connection[i].rrp_timeout = NULL;
     cb (i);
   }
 }
 
-static void when_rfnm (int i, void (*cb) (int))
+static void when_rfnm (int i, void (*cb) (int), void (*to) (int))
 {
   connection[i].rfnm_callback = cb;
+  connection[i].rfnm_timeout = to;
 }
 
 static void check_rfnm (int host)
@@ -164,6 +169,7 @@ static void check_rfnm (int host)
       continue;
     cb = connection[i].rfnm_callback;
     connection[i].rfnm_callback = NULL;
+    connection[i].rfnm_timeout = NULL;
     cb (i);
   }
 }
@@ -724,6 +730,21 @@ static int process_cls (uint8_t source, uint8_t *data)
   return 8;
 }
 
+static void just_drop (int i)
+{
+  fprintf (stderr, "NCP: RFNM timeout, drop connection %d.\n", i);
+  destroy (i);
+}
+
+static void cls_and_drop (int i)
+{
+  fprintf (stderr, "NCP: RFNM timeout, close connection %d.\n", i);
+  ncp_cls (connection[i].host,
+           connection[i].snd.lsock, connection[i].snd.rsock);
+  ncp_cls (connection[i].host,
+           connection[i].rcv.lsock, connection[i].rcv.rsock);
+}
+
 static void send_rts (int i)
 {
   if (connection[i].flags & CONN_SENT_RTS)
@@ -746,7 +767,7 @@ static void send_str_and_rts (int i)
              connection[i].snd.rsock, connection[i].snd.size);
     connection[i].flags |= CONN_SENT_STR;
   }
-  when_rfnm (i, send_rts);
+  when_rfnm (i, send_rts, cls_and_drop);
   check_rfnm (connection[i].host);
 }
 
@@ -807,8 +828,8 @@ static int process_all (uint8_t source, uint8_t *data)
     fprintf (stderr, "NCP: New connection %d.\n", j);
     connection[j].snd.size = 8;
     connection[j].rcv.link = 44;
-    when_rfnm (j, send_str_and_rts);
-    when_rfnm (i, send_cls_snd);
+    when_rfnm (j, send_str_and_rts, cls_and_drop);
+    when_rfnm (i, send_cls_snd, just_drop);
     check_rfnm (source);
   }
   return 7;
@@ -1044,7 +1065,7 @@ static void process_regular (uint8_t *packet, int length)
     if (connection[i].flags & CONN_CLIENT) {
       uint32_t s = sock (&packet[9]);
       fprintf (stderr, "NCP: ICP link %u socket %u.\n", link, s);
-      when_rfnm (i, send_cls_rcv);
+      when_rfnm (i, send_cls_rcv, just_drop);
       connection[i].snd.rsock = s;
 
       j = find_rcv_sockets (source, connection[i].rcv.lsock+2, s+1);
@@ -1057,7 +1078,7 @@ static void process_regular (uint8_t *packet, int length)
         connection[j].snd.size = 8;
         connection[j].rcv.link = 45;
         fprintf (stderr, "NCP: New connection %d.\n", j);
-        when_rfnm (j, send_str_and_rts);
+        when_rfnm (j, send_str_and_rts, cls_and_drop);
       }
       connection[j].listen = connection[i].rcv.rsock;
       connection[j].flags |= CONN_GOT_SOCKET;
@@ -1254,11 +1275,17 @@ static void app_echo (void)
   ncp_eco (host, app[2]);
 }
 
-static void app_open_send_rts (int i)
+static void app_open_rts (int i)
 {
   // Send first ICP RTS.
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
            connection[i].rcv.rsock, connection[i].rcv.link);
+}
+
+static void app_open_fail (int i)
+{
+  fprintf (stderr, "NCP: Timed out waiting for RRP.\n");
+  reply_open (connection[i].host, connection[i].rcv.rsock, 255);
 }
 
 static void app_open (void)
@@ -1279,13 +1306,12 @@ static void app_open (void)
   connection[i].client.len = len;
 
   if ((hosts[host].flags & HOST_ALIVE) == 0) {
-    // We haven't communicated with this host yet.
+    // We haven't communicated with this host yet, send reset and wait.
     ncp_rst (host);
-    // Wait for RRP, then send RTS.
-    when_rrp (i, app_open_send_rts);
+    when_rrp (i, app_open_rts, app_open_fail);
   } else {
     // Ok to send RTS directly.
-    app_open_send_rts (i);
+    app_open_rts (i);
   }
 }
 
