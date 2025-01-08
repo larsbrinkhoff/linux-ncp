@@ -89,6 +89,7 @@ struct
   int host;
   unsigned flags;
   int listen;
+  int all_msgs, all_bits;
   struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
   void (*rrp_callback) (int);
   void (*rrp_timeout) (int);
@@ -250,6 +251,7 @@ static void destroy (int i)
   connection[i].rcv.lsock = connection[i].rcv.rsock =
     connection[i].snd.lsock = connection[i].snd.rsock = 0;
   connection[i].flags = 0;
+  connection[i].all_msgs = connection[i].all_bits = 0;
   connection[i].rrp_callback = NULL;
   connection[i].rfnm_callback = NULL;
 }
@@ -807,9 +809,11 @@ static int process_all (uint8_t source, uint8_t *data)
 {
   int i, j;
   uint8_t link = data[0];
+  uint16_t msgs = data[1] << 8 | data[2];
+  uint32_t bits = data[3] << 24 | data[4] << 16 | data[5] << 8 | data[6];
 
-  fprintf (stderr, "NCP: Received ALL from %03o, link %u.\n",
-           source, link);
+  fprintf (stderr, "NCP: Received ALL from %03o, link %u, msgs %u, bits %u.\n",
+           source, link, msgs, bits);
   i = find_link (source, link);
   if (i == -1) {
     ncp_err (source, ERR_SOCKET, data - 1, 10);
@@ -844,6 +848,8 @@ static int process_all (uint8_t source, uint8_t *data)
     when_rfnm (i, send_cls_snd, just_drop);
     check_rfnm (source);
   }
+  connection[i].all_msgs += msgs;
+  connection[i].all_bits += bits;
   return 7;
 }
 
@@ -1385,6 +1391,8 @@ static void app_write (int n)
   memcpy(packet + 21, app + 2, n);
   send_imp (0, IMP_REGULAR, connection[i].host, connection[i].snd.link, 0, 0,
             NULL, 2 + (n + 6) / 2);
+  connection[i].all_msgs--;
+  connection[i].all_bits -= 8 * n;
   reply_write (i, n);
 }
 
