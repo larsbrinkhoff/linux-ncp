@@ -18,6 +18,7 @@
 #define RFNM_TIMEOUT   10
 #define RRP_TIMEOUT    20
 #define ERP_TIMEOUT    20
+#define ALL_TIMEOUT    60
 
 #define IMP_REGULAR       0
 #define IMP_LEADER_ERROR  1
@@ -71,6 +72,8 @@
 
 #define CONNECTIONS 20
 
+static void send_socket (int i);
+
 static int fd;
 static struct sockaddr_un server;
 static struct sockaddr_un client;
@@ -97,6 +100,12 @@ struct
   void (*rfnm_callback) (int);
   void (*rfnm_timeout) (int);
   unsigned long rfnm_time;
+  void (*all_callback) (int);
+  void (*all_timeout) (int);
+  unsigned long all_time;
+  uint8_t buffer[1024];
+  uint8_t *ptr;
+  int length;
 } connection[CONNECTIONS];
 
 struct
@@ -473,6 +482,53 @@ static int process_nop (uint8_t source, uint8_t *data)
   return 0;
 }
 
+static void check_all (int i)
+{
+  void (*cb) (int) = connection[i].all_callback;
+  int length, count;
+  if (cb == NULL)
+    return;
+  if (connection[i].all_msgs < 1)
+    return;
+  if (connection[i].all_bits < 8)
+    return;
+  length = connection[i].length;
+  if (8 * length > connection[i].all_bits)
+    length = connection[i].all_bits / 8;
+  count = 8 * length / connection[i].snd.size;
+  connection[i].ptr[-5] = 0;
+  connection[i].ptr[-4] = connection[i].snd.size;
+  connection[i].ptr[-3] = count >> 8;
+  connection[i].ptr[-2] = count;
+  connection[i].ptr[-1] = 0;
+  send_imp (0, IMP_REGULAR, connection[i].host, connection[i].snd.link,
+            0, 0, connection[i].ptr - 5, 2 + (length + 6)/2);
+  connection[i].all_msgs--;
+  connection[i].all_bits -= connection[i].snd.size * count;
+  cb (i);
+  connection[i].length -= length;
+  connection[i].ptr += length;
+  if (connection[i].length == 0) {
+    connection[i].all_callback = NULL;
+    connection[i].all_timeout = NULL;
+  } else {
+    connection[i].all_time = time_tick + ALL_TIMEOUT;
+  }
+}
+
+static void when_all (int i, void *data, int length,
+                      void (*cb) (int), void (*to) (int))
+{
+  int octets = (length + 7) / 8;
+  connection[i].all_callback = cb;
+  connection[i].all_timeout = to;
+  connection[i].all_time = time_tick + ALL_TIMEOUT;
+  connection[i].length = octets;
+  connection[i].ptr = connection[i].buffer + 5;
+  memcpy (connection[i].ptr, data, octets);
+  check_all (i);
+}
+
 static uint32_t sock (uint8_t *data)
 {
   uint32_t x;
@@ -535,6 +591,15 @@ static void maybe_reply (int i)
   }
 }
 
+static void send_socket_timeout (int i)
+{
+  fprintf (stderr, "NCP: Timeout sending ICP socket, connection %d.\n", i);
+  ncp_cls (connection[i].host,
+           connection[i].snd.lsock, connection[i].snd.rsock);
+  ncp_cls (connection[i].host,
+           connection[i].rcv.lsock, connection[i].rcv.rsock);
+}
+
 static int process_rts (uint8_t source, uint8_t *data)
 {
   int i;
@@ -558,6 +623,8 @@ static int process_rts (uint8_t source, uint8_t *data)
        RTS to initiate a new connection.  Reply with an STR for the
        initial part of ICP, which is to send the server data
        connection socket. */
+    uint8_t tmp[4];
+    uint32_t s = 0200;
     i = make_open (source, 0, 0, lsock, rsock);
     fprintf (stderr, "NCP: Listening to %u: new connection %d, link %u.\n",
              lsock, i, link);
@@ -573,6 +640,11 @@ static int process_rts (uint8_t source, uint8_t *data)
              connection[i].snd.rsock,
              connection[i].snd.size);
     connection[i].flags |= CONN_SENT_STR;
+    tmp[0] = (s >> 24) & 0xFF;
+    tmp[1] = (s >> 16) & 0xFF;
+    tmp[2] = (s >>  8) & 0xFF;
+    tmp[3] = (s >>  0) & 0xFF;
+    when_all (i, tmp, 32, send_socket, send_socket_timeout);
   } else if ((i = find_snd_sockets (source, lsock, rsock)) != -1) {
     /* There already exists a connection for this socket pair, which
        means an STR was sent previously.  */
@@ -805,9 +877,35 @@ static void send_cls_rcv (int i)
   connection[i].snd.size = connection[i].rcv.size = -1;
 }
 
+static void send_socket (int i)
+{
+  int j;
+  int s =
+    connection[i].buffer[5] << 24 |
+    connection[i].buffer[6] << 24 |
+    connection[i].buffer[7] << 24 |
+    connection[i].buffer[8];
+  fprintf (stderr, "NCP: Send socket %u for ICP.\n", s);
+  j = make_open (connection[i].host,
+                 s, connection[i].snd.rsock + 3,
+                 s + 1, connection[i].snd.rsock + 2);
+  if (j == -1) {
+    // table full
+    return;
+  }
+  connection[j].flags |= CONN_SERVER;
+  connection[j].listen = listening[i].sock;
+  fprintf (stderr, "NCP: New connection %d.\n", j);
+  connection[j].snd.size = 8;
+  connection[j].rcv.link = 44;
+  when_rfnm (j, send_str_and_rts, cls_and_drop);
+  when_rfnm (i, send_cls_snd, just_drop);
+  check_rfnm (connection[i].host);
+}
+
 static int process_all (uint8_t source, uint8_t *data)
 {
-  int i, j;
+  int i;
   uint8_t link = data[0];
   uint16_t msgs = data[1] << 8 | data[2];
   uint32_t bits = data[3] << 24 | data[4] << 16 | data[5] << 8 | data[6];
@@ -817,39 +915,11 @@ static int process_all (uint8_t source, uint8_t *data)
   i = find_link (source, link);
   if (i == -1) {
     ncp_err (source, ERR_SOCKET, data - 1, 10);
-  } else if (connection[i].flags & CONN_SERVER) {
-    uint8_t tmp[9];
-    uint32_t s = 0200;
-    tmp[0] = 0;
-    tmp[1] = 32;
-    tmp[2] = 0;
-    tmp[3] = 1;
-    tmp[4] = 0;
-    tmp[5] = (s >> 24) & 0xFF;
-    tmp[6] = (s >> 16) & 0xFF;
-    tmp[7] = (s >>  8) & 0xFF;
-    tmp[8] = (s >>  0) & 0xFF;
-    fprintf (stderr, "NCP: Send socket %u for ICP.\n", s);
-    send_imp (0, IMP_REGULAR, connection[i].host, connection[i].snd.link,
-              0, 0, &tmp, 7);
-    j = make_open (connection[i].host,
-                   s, connection[i].snd.rsock + 3,
-                   s + 1, connection[i].snd.rsock + 2);
-    if (j == -1) {
-      // table full
-      return 7;
-    }
-    connection[j].flags |= CONN_SERVER;
-    connection[j].listen = listening[i].sock;
-    fprintf (stderr, "NCP: New connection %d.\n", j);
-    connection[j].snd.size = 8;
-    connection[j].rcv.link = 44;
-    when_rfnm (j, send_str_and_rts, cls_and_drop);
-    when_rfnm (i, send_cls_snd, just_drop);
-    check_rfnm (source);
+    return 7;
   }
   connection[i].all_msgs += msgs;
   connection[i].all_bits += bits;
+  check_all (i);
   return 7;
 }
 
@@ -1378,22 +1448,33 @@ static void reply_write (uint8_t connection, uint16_t length)
              client.sun_path, strerror (errno));
 }
 
+static void send_data_timeout (int i)
+{
+  fprintf (stderr, "NCP: Timeout sending data, connection %d, link %d, %d bytes.\n",
+           i, connection[i].snd.link, connection[i].length);
+  reply_write (i, 0);
+}
+
+static void send_data_now (int i)
+{
+  fprintf (stderr, "NCP: Send data, connection %d, link %d, %d bytes.\n",
+           i, connection[i].snd.link, connection[i].length);
+  reply_write (i, connection[i].length);
+}
+
+static void send_data (int i)
+{
+  when_rfnm (i, send_data_now, send_data_timeout);
+}
+
 static void app_write (int n)
 {
   int i = app[1];
   fprintf (stderr, "NCP: Application write, %u bytes to connection %u.\n",
            n, i);
-  packet[16] = 0;
-  packet[17] = connection[i].snd.size;
-  packet[18] = n >> 8;
-  packet[19] = n;
-  packet[20] = 0;
-  memcpy(packet + 21, app + 2, n);
-  send_imp (0, IMP_REGULAR, connection[i].host, connection[i].snd.link, 0, 0,
-            NULL, 2 + (n + 6) / 2);
-  connection[i].all_msgs--;
-  connection[i].all_bits -= 8 * n;
-  reply_write (i, n);
+  if (n > sizeof connection[i].buffer - 5)
+    n = sizeof connection[i].buffer - 5;
+  when_all (i, app + 2, 8 * n, send_data, send_data_timeout);
 }
 
 static void app_interrupt (void)
@@ -1461,6 +1542,13 @@ static void tick (void)
       connection[i].rfnm_callback = NULL;
       connection[i].rfnm_timeout = NULL;
       connection[i].rrp_time = time_tick - 1;
+      to (i);
+    }
+    to = connection[i].all_timeout;
+    if (to != NULL && connection[i].all_time == time_tick) {
+      connection[i].all_callback = NULL;
+      connection[i].all_timeout = NULL;
+      connection[i].all_time = time_tick - 1;
       to (i);
     }
   }
