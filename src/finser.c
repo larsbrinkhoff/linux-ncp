@@ -39,7 +39,7 @@ int main (int argc, char **argv)
             "Sample response from Finger server.\r\n"
             "Data from client was: \"%s\".\r\n", command);
   size = strlen (reply);
-  if (ncp_write (connection, reply, size) == -1) {
+  if (ncp_write (connection, reply, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);
   }

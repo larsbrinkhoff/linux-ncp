@@ -1321,11 +1321,13 @@ static void app_read (void)
   ncp_all (connection[i].host, connection[i].rcv.link, 1, 8 * app[2]);
 }
 
-static void reply_write (uint8_t connection)
+static void reply_write (uint8_t connection, uint16_t length)
 {
-  uint8_t reply[2];
+  uint8_t reply[4];
   reply[0] = WIRE_WRITE+1;
   reply[1] = connection;
+  reply[2] = length >> 8;
+  reply[3] = length;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
@@ -1344,7 +1346,7 @@ static void app_write (int n)
   memcpy(packet + 21, app + 2, n);
   send_imp (0, IMP_REGULAR, connection[i].host, connection[i].snd.link, 0, 0,
             NULL, 2 + (n + 6) / 2);
-  reply_write (i);
+  reply_write (i, n);
 }
 
 static void app_interrupt (void)

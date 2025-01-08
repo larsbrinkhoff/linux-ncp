@@ -160,7 +160,8 @@ static void telnet_client (int host, int sock, int new)
     exit (1);
   }
 
-  if (ncp_write (connection, options, strlen (options)) == -1) {
+  size = strlen (options);
+  if (ncp_write (connection, options, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);
   }
@@ -181,7 +182,7 @@ static void telnet_client (int host, int sock, int new)
 
 static void telnet_server (int sock, int new)
 {
-  int host, connection;
+  int host, connection, size;
   char *banner;
 
   if (ncp_listen (sock, &host, &connection) == -1) {
@@ -189,13 +190,15 @@ static void telnet_server (int sock, int new)
     exit (1);
   }
 
-  if (ncp_write (connection, options, strlen (options)) == -1) {
+  size = strlen (options);
+  if (ncp_write (connection, options, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);
   }
 
   banner = "Welcome to Unix.\r\n";
-  if (ncp_write (connection, banner, strlen (banner)) == -1) {
+  size = strlen (banner);
+  if (ncp_write (connection, banner, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);
   }

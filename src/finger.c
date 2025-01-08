@@ -40,7 +40,8 @@ int main (int argc, char **argv)
   }
 
   command = "Sample Finger command from client.\r\n";
-  if (ncp_write (connection, command, strlen (command)) == -1) {
+  size = strlen (command);
+  if (ncp_write (connection, command, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);
   }

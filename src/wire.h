@@ -20,7 +20,7 @@ static int wire_check (int type, int size)
   case WIRE_READ:        return size == 3;
   case WIRE_READ+1:      return 1;
   case WIRE_WRITE:       return 1;
-  case WIRE_WRITE+1:     return size == 2;
+  case WIRE_WRITE+1:     return size == 4;
   case WIRE_INTERRUPT:   return size == 2;
   case WIRE_INTERRUPT+1: return size == 2;
   case WIRE_CLOSE:       return size == 2;
