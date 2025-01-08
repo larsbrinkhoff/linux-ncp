@@ -163,16 +163,17 @@ int ncp_read (int connection, void *data, int *length)
   return 0;
 }
 
-int ncp_write (int connection, void *data, int length)
+int ncp_write (int connection, void *data, int *length)
 {
   type (WIRE_WRITE);
   add (connection);
-  memcpy (message + size, data, length);
-  size += length;
+  memcpy (message + size, data, *length);
+  size += *length;
   if (transact () == -1)
     return -1;
   if (message[1] != connection)
     return -1;
+  *length = message[2] << 8 | message[3];
   return 0;
 }
 
