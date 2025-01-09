@@ -19,6 +19,7 @@
 #define RRP_TIMEOUT    20
 #define ERP_TIMEOUT    20
 #define ALL_TIMEOUT    60
+#define RFC_TIMEOUT     3
 
 #define IMP_REGULAR       0
 #define IMP_LEADER_ERROR  1
@@ -103,6 +104,8 @@ struct
   void (*all_callback) (int);
   void (*all_timeout) (int);
   unsigned long all_time;
+  void (*rfc_timeout) (int);
+  unsigned long rfc_time;
   uint8_t buffer[1024];
   uint8_t *ptr;
   int length;
@@ -262,7 +265,10 @@ static void destroy (int i)
   connection[i].flags = 0;
   connection[i].all_msgs = connection[i].all_bits = 0;
   connection[i].rrp_callback = NULL;
+  connection[i].rrp_timeout = NULL;
   connection[i].rfnm_callback = NULL;
+  connection[i].rfnm_timeout = NULL;
+  connection[i].rfc_timeout = NULL;
 }
 
 static void send_imp (int flags, int type, int destination, int link, int id,
@@ -529,6 +535,12 @@ static void when_all (int i, void *data, int length,
   check_all (i);
 }
 
+static void unless_rfc (int i, void (*to) (int))
+{
+  connection[i].rfc_timeout = to;
+  connection[i].rfc_time = time_tick + RFC_TIMEOUT;
+}
+
 static uint32_t sock (uint8_t *data)
 {
   uint32_t x;
@@ -584,9 +596,11 @@ static void maybe_reply (int i)
   if ((connection[i].flags & CONN_GOT_BOTH) == CONN_GOT_BOTH) {
     fprintf (stderr, "NCP: Server got both RTS and STR from client.\n");
     connection[i].flags &= ~CONN_SERVER;
+    connection[i].rfc_timeout = NULL;
     reply_listen (connection[i].host, connection[i].listen, i);
   } else if ((connection[i].flags & CONN_GOT_ALL) == CONN_GOT_ALL) {
     fprintf (stderr, "NCP: Client got RTS, STR, and socket from server.\n");
+    connection[i].rfc_timeout = NULL;
     reply_open (connection[i].host, connection[i].listen, i);
   }
 }
@@ -598,6 +612,22 @@ static void send_socket_timeout (int i)
            connection[i].snd.lsock, connection[i].snd.rsock);
   ncp_cls (connection[i].host,
            connection[i].rcv.lsock, connection[i].rcv.rsock);
+}
+
+static void rfc_timeout (int i)
+{
+  fprintf (stderr, "NCP: Timed out completing RFC for connection %d.\n", i);
+  connection[i].snd.size = connection[i].rcv.size = -1;
+  connection[i].rfnm_timeout = NULL;
+  connection[i].all_timeout = NULL;
+  if (connection[i].rcv.lsock != 0 && connection[i].rcv.rsock != 0) {
+    ncp_cls (connection[i].host,
+             connection[i].rcv.lsock, connection[i].rcv.rsock);
+  }
+  if (connection[i].snd.lsock != 0 && connection[i].snd.rsock != 0) {
+    ncp_cls (connection[i].host,
+             connection[i].snd.lsock, connection[i].snd.rsock);
+  }
 }
 
 static int process_rts (uint8_t source, uint8_t *data)
@@ -651,6 +681,7 @@ static int process_rts (uint8_t source, uint8_t *data)
     fprintf (stderr, "NCP: Confirmed STR, connection %d link %u.\n", i, link);
     connection[i].snd.link = link;
     connection[i].flags |= CONN_GOT_RTS;
+    connection[i].rfc_timeout = NULL;
     maybe_reply (i);
   } else if ((i = find_rcv_sockets (source, lsock-1, rsock+1)) != -1) {
     /* There already exists a connection for this socket pair, but
@@ -686,6 +717,7 @@ static int process_rts (uint8_t source, uint8_t *data)
              connection[i].snd.rsock,
              connection[i].snd.size);
     connection[i].flags |= CONN_SENT_STR;
+    unless_rfc (i, rfc_timeout);
   }
 
   return 9;
@@ -722,6 +754,7 @@ static int process_str (uint8_t source, uint8_t *data)
       ncp_all (source, connection[i].rcv.link, 1, 1000);
     } else {
       connection[i].flags |= CONN_GOT_STR;
+      connection[i].rfc_timeout = NULL;
       maybe_reply (i);
     }
   } else if ((i = find_snd_sockets (source, lsock+1, rsock-1)) != -1) {
@@ -759,6 +792,7 @@ static int process_str (uint8_t source, uint8_t *data)
              connection[i].rcv.rsock,
              connection[i].rcv.link);
     connection[i].flags |= CONN_SENT_RTS;
+    unless_rfc (i, rfc_timeout);
   }
 
   return 9;
@@ -841,6 +875,7 @@ static void send_rts (int i)
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
            connection[i].rcv.rsock, connection[i].rcv.link);
   connection[i].flags |= CONN_SENT_RTS;
+  unless_rfc (i, rfc_timeout);
 }
 
 static void send_str_and_rts (int i)
@@ -852,6 +887,7 @@ static void send_str_and_rts (int i)
     ncp_str (connection[i].host, connection[i].snd.lsock,
              connection[i].snd.rsock, connection[i].snd.size);
     connection[i].flags |= CONN_SENT_STR;
+    unless_rfc (i, rfc_timeout);
   }
   when_rfnm (i, send_rts, cls_and_drop);
   check_rfnm (connection[i].host);
@@ -1155,6 +1191,7 @@ static void process_regular (uint8_t *packet, int length)
       fprintf (stderr, "NCP: ICP link %u socket %u.\n", link, s);
       when_rfnm (i, send_cls_rcv, just_drop);
       connection[i].snd.rsock = s;
+      connection[i].rfc_timeout = NULL;
 
       j = find_rcv_sockets (source, connection[i].rcv.lsock+2, s+1);
       if (j == -1)
@@ -1364,11 +1401,19 @@ static void app_echo (void)
   ncp_eco (host, app[2]);
 }
 
+static void app_open_rfc_failed (int i)
+{
+  fprintf (stderr, "NCP: Timed out completing RFC for connection %d.\n", i);
+  reply_open (connection[i].host, connection[i].rcv.rsock, 255);
+  when_rfnm (i, send_cls_rcv, just_drop);
+}
+
 static void app_open_rts (int i)
 {
   // Send first ICP RTS.
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
            connection[i].rcv.rsock, connection[i].rcv.link);
+  unless_rfc (i, app_open_rfc_failed);
 }
 
 static void app_open_fail (int i)
@@ -1549,6 +1594,12 @@ static void tick (void)
       connection[i].all_callback = NULL;
       connection[i].all_timeout = NULL;
       connection[i].all_time = time_tick - 1;
+      to (i);
+    }
+    to = connection[i].rfc_timeout;
+    if (to != NULL && connection[i].rfc_time == time_tick) {
+      connection[i].rfc_timeout = NULL;
+      connection[i].rfc_time = time_tick - 1;
       to (i);
     }
   }
