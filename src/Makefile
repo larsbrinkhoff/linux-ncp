@@ -19,5 +19,7 @@ finger: finger.o libncp.a
 finser: finser.o libncp.a
 	$(CC) -o $@ $< $(NCP)
 
-telnet: telnet.o libncp.a
-	$(CC) -o $@ $< $(NCP)
+telnet: telnet.o tty.o libncp.a
+	$(CC) -o $@ telnet.o tty.o $(NCP)
+
+tty:: tty.h
