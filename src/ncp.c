@@ -68,12 +68,31 @@
 #define CONN_GOT_RTS       000100
 #define CONN_GOT_STR       000200
 #define CONN_GOT_SOCKET    000400
-#define CONN_GOT_BOTH      (CONN_SERVER | CONN_GOT_RTS | CONN_GOT_STR)
-#define CONN_GOT_ALL       (CONN_GOT_RTS | CONN_GOT_STR | CONN_GOT_SOCKET)
+#define CONN_GOT_BOTH      (CONN_LISTEN | CONN_GOT_RTS | CONN_GOT_STR)
+#define CONN_GOT_ALL       (CONN_OPEN | CONN_GOT_RTS | CONN_GOT_STR | CONN_GOT_SOCKET)
+#define CONN_LISTEN        001000
+#define CONN_OPEN          002000
+#define CONN_READ          004000
+#define CONN_WRITE         010000
+#define CONN_CLOSE         020000
+#define CONN_APPS          (CONN_LISTEN | CONN_OPEN | CONN_READ \
+                            | CONN_WRITE |  CONN_CLOSE)
+
+#define CONN_GOT_RCV_CLS(CONN, OP)  (connection[CONN].rcv.size OP -1)
+#define CONN_GOT_SND_CLS(CONN, OP)  (connection[CONN].snd.size OP -1)
+#define CONN_SENT_RCV_CLS(CONN, OP) (connection[CONN].rcv.link OP -1)
+#define CONN_SENT_SND_CLS(CONN, OP) (connection[CONN].snd.link OP -1)
 
 #define CONNECTIONS 20
 
 static void send_socket (int i);
+static void just_drop (int i);
+static void reply_read (uint8_t connection, uint8_t *data, int n);
+static void reply_write (uint8_t connection, uint16_t length);
+static void send_rts (int i);
+static void send_str (int i);
+static void send_cls_rcv (int i);
+static void send_cls_snd (int i);
 
 static int fd;
 static struct sockaddr_un server;
@@ -89,7 +108,7 @@ typedef struct
 
 struct
 {
-  client_t client;
+  client_t client, reader, writer;
   int host;
   unsigned flags;
   int listen;
@@ -108,7 +127,7 @@ struct
   unsigned long rfc_time;
   uint8_t buffer[1024];
   uint8_t *ptr;
-  int length;
+  int length, remaining;
 } connection[CONNECTIONS];
 
 struct
@@ -498,7 +517,7 @@ static void check_all (int i)
     return;
   if (connection[i].all_bits < 8)
     return;
-  length = connection[i].length;
+  length = connection[i].remaining;
   if (8 * length > connection[i].all_bits)
     length = connection[i].all_bits / 8;
   count = 8 * length / connection[i].snd.size;
@@ -511,10 +530,10 @@ static void check_all (int i)
             0, 0, connection[i].ptr - 5, 2 + (length + 6)/2);
   connection[i].all_msgs--;
   connection[i].all_bits -= connection[i].snd.size * count;
-  cb (i);
-  connection[i].length -= length;
+  connection[i].remaining -= length;
   connection[i].ptr += length;
-  if (connection[i].length == 0) {
+  if (connection[i].remaining == 0) {
+    cb (i);
     connection[i].all_callback = NULL;
     connection[i].all_timeout = NULL;
   } else {
@@ -529,7 +548,7 @@ static void when_all (int i, void *data, int length,
   connection[i].all_callback = cb;
   connection[i].all_timeout = to;
   connection[i].all_time = time_tick + ALL_TIMEOUT;
-  connection[i].length = octets;
+  connection[i].length = connection[i].remaining = octets;
   connection[i].ptr = connection[i].buffer + 5;
   memcpy (connection[i].ptr, data, octets);
   check_all (i);
@@ -551,41 +570,50 @@ static uint32_t sock (uint8_t *data)
   return x;
 }
 
-static void reply_open (uint8_t host, uint32_t socket, uint8_t connection)
+static void reply_open (uint8_t host, uint32_t socket, uint8_t i, uint8_t e)
 {
-  uint8_t reply[7];
+  uint8_t reply[8];
+  fprintf (stderr, "NCP: Application open reply socket %u on host %03o: "
+           "connection %u, error %u.\n", socket, host, i, e);
+  connection[i].flags &= ~CONN_OPEN;
   reply[0] = WIRE_OPEN+1;
   reply[1] = host;
   reply[2] = socket >> 24;
   reply[3] = socket >> 16;
   reply[4] = socket >> 8;
   reply[5] = socket;
-  reply[6] = connection;
+  reply[6] = i;
+  reply[7] = e;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
 }
 
-static void reply_listen (uint8_t host, uint32_t socket, uint8_t connection)
+static void reply_listen (uint8_t host, uint32_t socket, uint8_t i)
 {
   uint8_t reply[7];
+  fprintf (stderr, "NCP: Application listen reply socket %u on host %03o: "
+           "connection %u.\n", socket, host, i);
+  connection[i].flags &= ~CONN_LISTEN;
   reply[0] = WIRE_LISTEN+1;
   reply[1] = host;
   reply[2] = socket >> 24;
   reply[3] = socket >> 16;
   reply[4] = socket >> 8;
   reply[5] = socket;
-  reply[6] = connection;
+  reply[6] = i;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
 }
 
-static void reply_close (uint8_t connection)
+static void reply_close (uint8_t i)
 {
   uint8_t reply[2];
+  fprintf (stderr, "NCP: Application close reply connection %u.\n", i);
+  connection[i].flags &= ~CONN_CLOSE;
   reply[0] = WIRE_CLOSE+1;
-  reply[1] = connection;
+  reply[1] = i;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
@@ -595,23 +623,21 @@ static void maybe_reply (int i)
 {
   if ((connection[i].flags & CONN_GOT_BOTH) == CONN_GOT_BOTH) {
     fprintf (stderr, "NCP: Server got both RTS and STR from client.\n");
-    connection[i].flags &= ~CONN_SERVER;
     connection[i].rfc_timeout = NULL;
     reply_listen (connection[i].host, connection[i].listen, i);
   } else if ((connection[i].flags & CONN_GOT_ALL) == CONN_GOT_ALL) {
     fprintf (stderr, "NCP: Client got RTS, STR, and socket from server.\n");
     connection[i].rfc_timeout = NULL;
-    reply_open (connection[i].host, connection[i].listen, i);
+    reply_open (connection[i].host, connection[i].listen, i, 0);
   }
 }
 
 static void send_socket_timeout (int i)
 {
   fprintf (stderr, "NCP: Timeout sending ICP socket, connection %d.\n", i);
+  CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].snd.lsock, connection[i].snd.rsock);
-  ncp_cls (connection[i].host,
-           connection[i].rcv.lsock, connection[i].rcv.rsock);
 }
 
 static void rfc_timeout (int i)
@@ -620,11 +646,13 @@ static void rfc_timeout (int i)
   connection[i].snd.size = connection[i].rcv.size = -1;
   connection[i].rfnm_timeout = NULL;
   connection[i].all_timeout = NULL;
-  if (connection[i].rcv.lsock != 0 && connection[i].rcv.rsock != 0) {
+  if (connection[i].rcv.link != -1) {
+    CONN_SENT_RCV_CLS(i, =);
     ncp_cls (connection[i].host,
              connection[i].rcv.lsock, connection[i].rcv.rsock);
   }
-  if (connection[i].snd.lsock != 0 && connection[i].snd.rsock != 0) {
+  if (connection[i].snd.link != -1) {
+    CONN_SENT_SND_CLS(i, =);
     ncp_cls (connection[i].host,
              connection[i].snd.lsock, connection[i].snd.rsock);
   }
@@ -632,7 +660,7 @@ static void rfc_timeout (int i)
 
 static int process_rts (uint8_t source, uint8_t *data)
 {
-  int i;
+  int i, j;
   uint32_t lsock, rsock;
   uint8_t link;
 
@@ -675,49 +703,69 @@ static int process_rts (uint8_t source, uint8_t *data)
     tmp[2] = (s >>  8) & 0xFF;
     tmp[3] = (s >>  0) & 0xFF;
     when_all (i, tmp, 32, send_socket, send_socket_timeout);
+
+    j = make_open (source,
+                   s, connection[i].snd.rsock+3,
+                   s+1, connection[i].snd.rsock+2);
+    connection[j].flags |= CONN_LISTEN;
+    connection[j].snd.size = 8;
+    connection[j].rcv.link = 46;
+    connection[j].rcv.size = connection[j].snd.link = 0;
+    connection[j].listen = lsock;
+    fprintf (stderr, "NCP: New connection %d sockets %d:%d %d:%d link %d\n",
+             j,
+             connection[j].rcv.lsock, connection[j].rcv.rsock,
+             connection[j].snd.lsock, connection[j].snd.rsock,
+             connection[j].rcv.link);
+    unless_rfc (j, just_drop);
   } else if ((i = find_snd_sockets (source, lsock, rsock)) != -1) {
-    /* There already exists a connection for this socket pair, which
-       means an STR was sent previously.  */
-    fprintf (stderr, "NCP: Confirmed STR, connection %d link %u.\n", i, link);
+    /* There already exists a connection for this socket pair. */
     connection[i].snd.link = link;
     connection[i].flags |= CONN_GOT_RTS;
-    connection[i].rfc_timeout = NULL;
-    maybe_reply (i);
-  } else if ((i = find_rcv_sockets (source, lsock-1, rsock+1)) != -1) {
-    /* There already exists a connection for this socket pair, but
-       only an STR was sent previously. */
-    connection[i].snd.lsock = lsock;
-    connection[i].snd.rsock = rsock;
-    connection[i].snd.link = link;
-    connection[i].snd.size = 8;
-    connection[i].flags |= CONN_GOT_RTS;
-    fprintf (stderr, "NCP: Confirm RTS, send STR sockets %u:%u size %u.\n",
-             connection[i].snd.lsock,
-             connection[i].snd.rsock,
-             connection[i].snd.size);
-    ncp_str (connection[i].host,
-             connection[i].snd.lsock,
-             connection[i].snd.rsock,
-             connection[i].snd.size);
-    connection[i].flags |= CONN_SENT_STR;
+    if (connection[i].flags & CONN_SENT_STR) {
+      fprintf (stderr, "NCP: Confirmed STR, connection %d link %u.\n", i, link);
+      connection[i].rfc_timeout = NULL;
+    } else {
+      fprintf (stderr, "NCP: Confirm RTS, send STR sockets %u:%u size %u.\n",
+               connection[i].snd.lsock,
+               connection[i].snd.rsock,
+               connection[i].snd.size);
+      ncp_str (connection[i].host,
+               connection[i].snd.lsock,
+               connection[i].snd.rsock,
+               connection[i].snd.size);
+    }
     maybe_reply (i);
   } else {
-    /* There is no connection for this socket pair. */
-    i = make_open (source, 0, 0, lsock, rsock);
-    connection[i].snd.size = 8; //Send byte size.
-    connection[i].snd.link = link;
-    connection[i].flags |= CONN_GOT_RTS;
-    fprintf (stderr, "NCP: New connection %d link %u.\n", i, link);
-    fprintf (stderr, "NCP: Confirm RTS, send STR sockets %u:%u size %u.\n",
-             connection[i].snd.lsock,
-             connection[i].snd.rsock,
-             connection[i].snd.size);
-    ncp_str (connection[i].host,
-             connection[i].snd.lsock,
-             connection[i].snd.rsock,
-             connection[i].snd.size);
-    connection[i].flags |= CONN_SENT_STR;
-    unless_rfc (i, rfc_timeout);
+    for (i = 0; i < CONNECTIONS; i++) {
+      if (connection[i].host == source &&
+          connection[i].rcv.lsock+3 == lsock &&
+          (connection[i].flags & CONN_CLIENT) != 0)
+        break;
+    }
+
+    if (i == CONNECTIONS) {
+      fprintf (stderr, "NCP: Not listening to %u; refusing.\n", lsock);
+      i = make_open (source, 0, 0, lsock, rsock);
+      connection[i].snd.size = 0;
+      ncp_cls (source, lsock, rsock);
+      unless_rfc (i, just_drop);
+    } else {
+      j = make_open (source, lsock-1, rsock+1, lsock, rsock);
+      connection[j].snd.size = 8;
+      connection[j].snd.link = link;
+      connection[j].rcv.link = 49;
+      connection[j].flags |= CONN_OPEN | CONN_GOT_RTS;
+      connection[j].listen = connection[i].rcv.rsock;
+      fprintf (stderr, "NCP: New connection %d sockets %d:%d %d:%d link %u\n",
+               j,
+               connection[j].rcv.lsock, connection[j].rcv.rsock,
+               connection[j].snd.lsock, connection[j].snd.rsock,
+               connection[j].snd.link);
+      when_rfnm (j, send_str, send_cls_snd);
+      unless_rfc (j, just_drop);
+      maybe_reply (j);
+    }
   }
 
   return 9;
@@ -734,7 +782,7 @@ There are two cases to consider:
 */
 static int process_str (uint8_t source, uint8_t *data)
 {
-  int i;
+  int i, j;
   uint32_t lsock, rsock;
   uint8_t size;
 
@@ -746,53 +794,58 @@ static int process_str (uint8_t source, uint8_t *data)
            rsock, lsock, size, source);
 
   if ((i = find_rcv_sockets (source, lsock, rsock)) != -1) {
-    /* There already exists a connection for this socket pair, which
-       means an RTS was sent previously.  */
-    fprintf (stderr, "NCP: Confirmed RTS, connection %d.\n", i);
+    /* There already exists a connection for this socket pair. */
     connection[i].rcv.size = size;
-    if (connection[i].flags & CONN_CLIENT) {
-      ncp_all (source, connection[i].rcv.link, 1, 1000);
+    connection[i].flags |= CONN_GOT_STR;
+    if (connection[i].flags & CONN_SENT_RTS) {
+      fprintf (stderr, "NCP: Confirmed RTS, connection %d.\n", i);
+      if (connection[i].flags & CONN_CLIENT) {
+        ncp_all (source, connection[i].rcv.link, 1, 1000);
+      } else {
+        connection[i].rfc_timeout = NULL;
+        maybe_reply (i);
+      }
     } else {
-      connection[i].flags |= CONN_GOT_STR;
-      connection[i].rfc_timeout = NULL;
+      fprintf (stderr, "NCP: Confirm STR, send RTS sockets %u:%u link %u.\n",
+               connection[i].rcv.lsock,
+               connection[i].rcv.rsock,
+               connection[i].rcv.link);
+      ncp_rts (connection[i].host,
+               connection[i].rcv.lsock,
+               connection[i].rcv.rsock,
+               connection[i].rcv.link);
       maybe_reply (i);
     }
-  } else if ((i = find_snd_sockets (source, lsock+1, rsock-1)) != -1) {
-    /* There already exists a connection for this socket pair, but
-       only an RTS was sent previously. */
-    connection[i].rcv.lsock = lsock;
-    connection[i].rcv.rsock = rsock;
-    connection[i].rcv.size = size;
-    connection[i].rcv.link = 45;
-    connection[i].flags |= CONN_GOT_STR;
-    fprintf (stderr, "NCP: Confirm STR, send RTS sockets %u:%u link %u.\n",
-             connection[i].rcv.lsock,
-             connection[i].rcv.rsock,
-             connection[i].rcv.link);
-    ncp_rts (connection[i].host,
-             connection[i].rcv.lsock,
-             connection[i].rcv.rsock,
-             connection[i].rcv.link);
-    connection[i].flags |= CONN_SENT_RTS;
-    maybe_reply (i);
   } else {
-    /* There is no connection for this socket pair. */
-    i = make_open (source, lsock, rsock, 0, 0);
-    connection[i].rcv.size = size;
-    connection[i].rcv.link = 43;
-    connection[i].flags |= CONN_GOT_STR;
-    fprintf (stderr, "NCP: New connection %d link %u.\n",
-             i, connection[i].rcv.link);
-    fprintf (stderr, "NCP: Confirm STR, send RTS sockets %u:%u link %u.\n",
-             connection[i].rcv.lsock,
-             connection[i].rcv.rsock,
-             connection[i].rcv.link);
-    ncp_rts (connection[i].host,
-             connection[i].rcv.lsock,
-             connection[i].rcv.rsock,
-             connection[i].rcv.link);
-    connection[i].flags |= CONN_SENT_RTS;
-    unless_rfc (i, rfc_timeout);
+    for (i = 0; i < CONNECTIONS; i++) {
+      if (connection[i].host == source &&
+          connection[i].snd.lsock+2 == lsock &&
+          (connection[i].flags & CONN_CLIENT) != 0)
+        break;
+    }
+
+    if (i == CONNECTIONS) {
+      fprintf (stderr, "NCP: Refusing RFC to socket %d.\n", lsock);
+      i = make_open (source, 0, 0, lsock, rsock);
+      connection[i].snd.size = 0;
+      ncp_cls (source, lsock, rsock);
+      unless_rfc (i, just_drop);
+    } else {
+      j = make_open (source, lsock, rsock, lsock+1, rsock-1);
+      connection[j].rcv.size = size;
+      connection[j].rcv.link = 47;
+      connection[j].snd.size = 8;
+      connection[j].flags |= CONN_OPEN | CONN_GOT_STR;
+      connection[j].listen = connection[i].rcv.rsock;
+      fprintf (stderr, "NCP: New connection %d sockets %d:%d %d:%d link %d\n",
+               j,
+               connection[j].rcv.lsock, connection[j].rcv.rsock,
+               connection[j].snd.lsock, connection[j].snd.rsock,
+               connection[j].rcv.link);
+      when_rfnm (j, send_rts, send_cls_rcv);
+      unless_rfc (j, just_drop);
+      maybe_reply (j);
+    }
   }
 
   return 9;
@@ -812,39 +865,49 @@ static int process_cls (uint8_t source, uint8_t *data)
 {
   int i;
   uint32_t lsock, rsock;
+
   rsock = sock (&data[0]);
   lsock = sock (&data[4]);
-  i = find_sockets (source, lsock, rsock);
-  if (i == -1) {
+  fprintf (stderr, "NCP: Received CLS sockets %u:%u from %03o.\n",
+           rsock, lsock, source);
+
+  if ((i = find_rcv_sockets (source, lsock, rsock)) != -1) {
+    connection[i].rcv.size = -1;
+    if (connection[i].rcv.link != -1) {
+      fprintf (stderr, "NCP: Remote closed connection %d.\n", i);
+      CONN_SENT_RCV_CLS(i, =);
+      ncp_cls (connection[i].host, lsock, rsock);
+    } else
+      fprintf (stderr, "NCP: Connection %u confirmed closed.\n", i);
+  } else if ((i = find_snd_sockets (source, lsock, rsock)) != -1) {
+    connection[i].snd.size = -1;
+    if (connection[i].snd.link != -1) {
+      fprintf (stderr, "NCP: Remote closed connection %d.\n", i);
+      CONN_SENT_SND_CLS(i, =);
+      ncp_cls (connection[i].host, lsock, rsock);
+    } else
+      fprintf (stderr, "NCP: Connection %u confirmed closed.\n", i);
+  } else {
     fprintf (stderr, "NCP: Remote tried to close %u:%u which does not exist.\n",
              lsock, rsock);
     ncp_err (source, ERR_SOCKET, data - 1, 9);
     return 8;
   }
 
-  fprintf (stderr, "NCP: Received CLS sockets %u:%u from %03o.\n",
-           rsock, lsock, source);
+  if (connection[i].flags & CONN_OPEN) {
+    fprintf (stderr, "NCP: Connection %u refused.\n", i);
+    reply_open (source, rsock, 0, 255);
+  } else if (connection[i].flags & CONN_READ) {
+    reply_read (source, packet, 0);
+  } else if (connection[i].flags & CONN_WRITE) {
+    reply_write (source, 0);
+  }
 
-  if (connection[i].rcv.lsock == lsock)
-    connection[i].rcv.lsock = connection[i].rcv.rsock = 0;
-  if (connection[i].snd.lsock == lsock)
-    connection[i].snd.lsock = connection[i].snd.rsock = 0;
-
-  if (connection[i].snd.size == -1) {
-    // Remote confirmed closing.
-    if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
-      fprintf (stderr, "NCP: Connection %u confirmed closed.\n", i);
-      if ((connection[i].flags & (CONN_CLIENT | CONN_SERVER)) == 0)
-        reply_close (i);
-      destroy (i);
-    }
-  } else {
-    // Remote closed connection.
-    ncp_cls (connection[i].host, lsock, rsock);
-    if (connection[i].rcv.lsock == 0 && connection[i].snd.lsock == 0) {
-      fprintf (stderr, "NCP: Connection %u closed by remote.\n", i);
-      destroy (i);
-    }
+  if (CONN_GOT_RCV_CLS(i, ==) && CONN_SENT_RCV_CLS(i, ==) &&
+      CONN_GOT_SND_CLS(i, ==) && CONN_SENT_SND_CLS(i, ==)) {
+    if (connection[i].flags & CONN_CLOSE)
+      reply_close (i);
+    destroy (i);
   }
 
   return 8;
@@ -859,6 +922,8 @@ static void just_drop (int i)
 static void cls_and_drop (int i)
 {
   fprintf (stderr, "NCP: RFNM timeout, close connection %d.\n", i);
+  CONN_SENT_SND_CLS(i, =);
+  CONN_SENT_RCV_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].snd.lsock, connection[i].snd.rsock);
   ncp_cls (connection[i].host,
@@ -875,6 +940,19 @@ static void send_rts (int i)
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
            connection[i].rcv.rsock, connection[i].rcv.link);
   connection[i].flags |= CONN_SENT_RTS;
+  unless_rfc (i, rfc_timeout);
+}
+
+static void send_str (int i)
+{
+  if (connection[i].flags & CONN_SENT_STR)
+    return;
+  fprintf (stderr, "NCP: Send STR %u:%u link %d.\n",
+           connection[i].snd.lsock, connection[i].snd.rsock,
+           connection[i].snd.link);
+  ncp_str (connection[i].host, connection[i].snd.lsock,
+           connection[i].snd.rsock, connection[i].snd.size);
+  connection[i].flags |= CONN_SENT_STR;
   unless_rfc (i, rfc_timeout);
 }
 
@@ -898,9 +976,9 @@ static void send_cls_snd (int i)
   fprintf (stderr, "NCP: Close ICP %u:%u link %d.\n",
            connection[i].snd.lsock, connection[i].snd.rsock,
            connection[i].snd.link);
+  CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].snd.lsock, connection[i].snd.rsock);
-  connection[i].snd.size = connection[i].rcv.size = -1;
 }
 
 static void send_cls_rcv (int i)
@@ -908,9 +986,9 @@ static void send_cls_rcv (int i)
   fprintf (stderr, "NCP: Close ICP %u:%u link %d.\n",
            connection[i].rcv.lsock, connection[i].rcv.rsock,
            connection[i].rcv.link);
+  CONN_SENT_RCV_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].rcv.lsock, connection[i].rcv.rsock);
-  connection[i].snd.size = connection[i].rcv.size = -1;
 }
 
 static void send_socket (int i)
@@ -922,18 +1000,7 @@ static void send_socket (int i)
     connection[i].buffer[7] << 24 |
     connection[i].buffer[8];
   fprintf (stderr, "NCP: Send socket %u for ICP.\n", s);
-  j = make_open (connection[i].host,
-                 s, connection[i].snd.rsock + 3,
-                 s + 1, connection[i].snd.rsock + 2);
-  if (j == -1) {
-    // table full
-    return;
-  }
-  connection[j].flags |= CONN_SERVER;
-  connection[j].listen = listening[i].sock;
-  fprintf (stderr, "NCP: New connection %d.\n", j);
-  connection[j].snd.size = 8;
-  connection[j].rcv.link = 44;
+  j = find_rcv_sockets (connection[i].host, s, connection[i].snd.rsock + 3);
   when_rfnm (j, send_str_and_rts, cls_and_drop);
   when_rfnm (i, send_cls_snd, just_drop);
   check_rfnm (connection[i].host);
@@ -1014,6 +1081,8 @@ static int process_eco (uint8_t source, uint8_t *data)
 static void reply_echo (uint8_t host, uint8_t data, uint8_t error)
 {
   uint8_t reply[4];
+  fprintf (stderr, "NCP: Application echo reply host %03o, data %u, error %u\n",
+           host, data, error);
   reply[0] = WIRE_ECHO+1;
   reply[1] = host;
   reply[2] = data;
@@ -1062,7 +1131,7 @@ static int process_err (uint8_t source, uint8_t *data)
     if (i != -1) {
       if ((rsock & 1) == 0)
         rsock--;
-      reply_open (source, rsock, 255);
+      reply_open (source, rsock, 0, 255);
       destroy (i);
     }
   }
@@ -1147,15 +1216,20 @@ static void process_ncp (uint8_t source, uint8_t *data, uint16_t count)
   }
 }
 
-static void reply_read (uint8_t connection, uint8_t *data, int n)
+static void reply_read (uint8_t i, uint8_t *data, int n)
 {
   static uint8_t reply[1000];
+  fprintf (stderr, "NCP: Application read reply connection %d, length %d.\n",
+           i, n);
+  connection[i].flags &= ~CONN_READ;
   reply[0] = WIRE_READ+1;
-  reply[1] = connection;
+  reply[1] = i;
   memcpy (reply + 2, data, n);
-  if (sendto (fd, reply, n + 2, 0, (struct sockaddr *)&client, len) == -1)
+  if (sendto (fd, reply, n + 2, 0,
+              (struct sockaddr *)&connection[i].reader.addr,
+              connection[i].reader.len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
-             client.sun_path, strerror (errno));
+             connection[i].reader.addr.sun_path, strerror (errno));
 }
 
 static void process_regular (uint8_t *packet, int length)
@@ -1190,8 +1264,8 @@ static void process_regular (uint8_t *packet, int length)
       uint32_t s = sock (&packet[9]);
       fprintf (stderr, "NCP: ICP link %u socket %u.\n", link, s);
       when_rfnm (i, send_cls_rcv, just_drop);
-      connection[i].snd.rsock = s;
       connection[i].rfc_timeout = NULL;
+      connection[i].flags &= ~CONN_OPEN;
 
       j = find_rcv_sockets (source, connection[i].rcv.lsock+2, s+1);
       if (j == -1)
@@ -1206,7 +1280,7 @@ static void process_regular (uint8_t *packet, int length)
         when_rfnm (j, send_str_and_rts, cls_and_drop);
       }
       connection[j].listen = connection[i].rcv.rsock;
-      connection[j].flags |= CONN_GOT_SOCKET;
+      connection[j].flags |= CONN_GOT_SOCKET | CONN_OPEN;
       check_rfnm (connection[j].host);
       maybe_reply (j);
 
@@ -1404,7 +1478,7 @@ static void app_echo (void)
 static void app_open_rfc_failed (int i)
 {
   fprintf (stderr, "NCP: Timed out completing RFC for connection %d.\n", i);
-  reply_open (connection[i].host, connection[i].rcv.rsock, 255);
+  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 255);
   when_rfnm (i, send_cls_rcv, just_drop);
 }
 
@@ -1413,13 +1487,14 @@ static void app_open_rts (int i)
   // Send first ICP RTS.
   ncp_rts (connection[i].host, connection[i].rcv.lsock,
            connection[i].rcv.rsock, connection[i].rcv.link);
+  connection[i].flags |= CONN_SENT_RTS;
   unless_rfc (i, app_open_rfc_failed);
 }
 
 static void app_open_fail (int i)
 {
   fprintf (stderr, "NCP: Timed out waiting for RRP.\n");
-  reply_open (connection[i].host, connection[i].rcv.rsock, 255);
+  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 255);
 }
 
 static void app_open (void)
@@ -1435,7 +1510,7 @@ static void app_open (void)
   // Initiate a connection.
   i = make_open (host, 1002, socket, 0, 0);
   connection[i].rcv.link = 42; //Receive link.
-  connection[i].flags |= CONN_CLIENT;
+  connection[i].flags |= CONN_CLIENT | CONN_OPEN;
   memcpy (&connection[i].client.addr, &client, len);
   connection[i].client.len = len;
 
@@ -1478,26 +1553,35 @@ static void app_read (void)
   i = app[1];
   fprintf (stderr, "NCP: Application read %u octets from connection %u.\n",
            app[2], i);
+  connection[i].flags |= CONN_READ;
+  memcpy (&connection[i].reader.addr, &client, len);
+  connection[i].reader.len = len;
   ncp_all (connection[i].host, connection[i].rcv.link, 1, 8 * app[2]);
 }
 
-static void reply_write (uint8_t connection, uint16_t length)
+static void reply_write (uint8_t i, uint16_t length)
 {
   uint8_t reply[4];
+  fprintf (stderr, "NCP: Application write reply connection %u, length %u.\n",
+           i, length);
+  connection[i].flags &= ~CONN_WRITE;
   reply[0] = WIRE_WRITE+1;
-  reply[1] = connection;
+  reply[1] = i;
   reply[2] = length >> 8;
   reply[3] = length;
-  if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
+  if (sendto (fd, reply, sizeof reply, 0,
+              (struct sockaddr *)&connection[i].writer.addr,
+              connection[i].writer.len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
-             client.sun_path, strerror (errno));
+             connection[i].writer.addr.sun_path, strerror (errno));
 }
 
 static void send_data_timeout (int i)
 {
-  fprintf (stderr, "NCP: Timeout sending data, connection %d, link %d, %d bytes.\n",
-           i, connection[i].snd.link, connection[i].length);
-  reply_write (i, 0);
+  fprintf (stderr, "NCP: Timeout sending data, connection %d, link %d, %d of %d bytes.\n",
+           i, connection[i].snd.link, connection[i].remaining,
+           connection[i].length);
+  reply_write (i, connection[i].length - connection[i].remaining);
 }
 
 static void send_data_now (int i)
@@ -1517,6 +1601,9 @@ static void app_write (int n)
   int i = app[1];
   fprintf (stderr, "NCP: Application write, %u bytes to connection %u.\n",
            n, i);
+  connection[i].flags |= CONN_WRITE;
+  memcpy (&connection[i].writer.addr, &client, len);
+  connection[i].writer.len = len;
   if (n > sizeof connection[i].buffer - 5)
     n = sizeof connection[i].buffer - 5;
   when_all (i, app + 2, 8 * n, send_data, send_data_timeout);
@@ -1533,7 +1620,10 @@ static void app_close (void)
 {
   int i = app[1];
   fprintf (stderr, "NCP: Application close, connection %u.\n", i);
-  connection[i].snd.size = connection[i].rcv.size = -1;
+  connection[i].flags &= ~CONN_APPS;
+  connection[i].flags |= CONN_CLOSE;
+  CONN_SENT_RCV_CLS(i, =);
+  CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host, connection[i].rcv.lsock, connection[i].rcv.rsock);
   ncp_cls (connection[i].host, connection[i].snd.lsock, connection[i].snd.rsock);
 }

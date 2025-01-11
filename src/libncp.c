@@ -123,7 +123,7 @@ int ncp_open (int host, unsigned socket, int *connection)
     return -1;
   if (u32 (message + 2) != socket)
     return -1;
-  if (message[6] == 255)
+  if (message[7] == 255)
     return -2;
   *connection = message[6];
   return 0;
@@ -153,6 +153,7 @@ int ncp_read (int connection, void *data, int *length)
   type (WIRE_READ);
   add (connection);
   add (*length);
+  *length = 0;
   n = transact ();
   if (n == -1)
     return -1;
@@ -169,6 +170,7 @@ int ncp_write (int connection, void *data, int *length)
   add (connection);
   memcpy (message + size, data, *length);
   size += *length;
+  *length = 0;
   if (transact () == -1)
     return -1;
   if (message[1] != connection)
