@@ -7,12 +7,12 @@
 
 int main (int argc, char **argv)
 {
-  char *command;
+  char command[1000];
   char reply[1000];
   int host, connection, size;
 
-  if (argc != 2) {
-    fprintf (stderr, "Usage: %s host\n", argv[0]);
+  if (argc < 2 || argc > 3) {
+    fprintf (stderr, "Usage: %s host [user(s)]\n", argv[0]);
     exit (1);
   }
 
@@ -39,8 +39,8 @@ int main (int argc, char **argv)
     exit (1);
   }
 
-  command = "Sample Finger command from client.\r\n";
-  size = strlen (command);
+  size = snprintf (command, sizeof command, "%s\r\n",
+                   argc == 3 ? argv[2] : "");
   if (ncp_write (connection, command, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
     exit (1);

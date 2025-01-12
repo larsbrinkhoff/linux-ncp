@@ -38,7 +38,7 @@ echo "Test ICP and simple data transfer using the Finger protocol."
 NCP=ncp2 ../src/finser &
 PID=$!
 sleep 1
-NCP=ncp3 ../src/finger 002 &
+NCP=ncp3 ../src/finger 002 "Sample Finger command from client." &
 sleep 10
 kill $! $PID 2>/dev/null || :
 
