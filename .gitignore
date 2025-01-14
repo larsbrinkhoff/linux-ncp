@@ -1,9 +1,9 @@
 *~
 *.o
-src/ncp
+src/ncpd
 src/libncp.a
-src/ping
-src/finger
-src/finser
-src/telnet
+apps/ncp-ping
+apps/ncp-finger
+apps/ncp-finser
+apps/ncp-telnet
 test/*.log
