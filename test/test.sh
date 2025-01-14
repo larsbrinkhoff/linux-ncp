@@ -2,6 +2,8 @@
 
 set -e
 
+APPS="../apps"
+
 RESULT=0
 
 trap "./arpanet.sh stop" EXIT INT QUIT
@@ -17,6 +19,7 @@ build() {
 }
 
 (cd ../src && make)
+(cd $APPS && make)
 test -r simh/scp.c || git submodule update --init
 test -x simh/BIN/h316 || (build)
 
@@ -26,23 +29,23 @@ echo Starting ARPANET.   Allow 30 seconds for IMP network to settle.
 sleep 10
 
 echo "Test pinging another host."
-NCP=ncp2 ../src/ping -c3 003 | grep 'Reply from host 003: seq=3' || fail
+NCP=ncp2 $APPS/ncp-ping -c3 003 | grep 'Reply from host 003: seq=3' || fail
 
 echo "Test pinging a dead host."
-NCP=ncp2 ../src/ping -c1 004 && fail
+NCP=ncp2 $APPS/ncp-ping -c1 004 && fail
 
 echo "Test pinging a dead IMP."
-NCP=ncp2 ../src/ping -c1 005 && fail
+NCP=ncp2 $APPS/ncp-ping -c1 005 && fail
 
 echo "Test ICP and simple data transfer using the Finger protocol."
-NCP=ncp2 ../src/finser &
+NCP=ncp2 $APPS/ncp-finser &
 PID=$!
 sleep 1
-NCP=ncp3 ../src/finger 002 "Sample Finger command from client." &
+NCP=ncp3 $APPS/ncp-finger 002 "Sample Finger command from client." &
 sleep 10
 kill $! $PID 2>/dev/null || :
 
 echo "Test RFC to socket without server."
-NCP=ncp3 ../src/finger 002
+NCP=ncp3 $(APPS)/ncp-finger 002
 
 exit $RESULT
