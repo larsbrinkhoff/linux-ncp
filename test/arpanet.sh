@@ -1,5 +1,8 @@
 #!/bin/sh
 
+NCPD="../src/ncpd"
+H316="simh/BIN/h316"
+
 start() {
     screen -S arpanet -X screen
     screen -S arpanet -X select "$1"
@@ -15,12 +18,12 @@ stop() {
 case "$1" in
     start)
         screen -dm -S arpanet -c screenrc
-        start 0 "imp2" "simh/BIN/h316 imp2.simh 2>imp2.log^M"
-        start 1 "imp3" "simh/BIN/h316 imp3.simh 2>imp3.log^M"
-        start 2 "imp4" "simh/BIN/h316 imp4.simh 2>imp4.log^M"
+        start 0 "imp2" ""$H316" imp2.simh 2>imp2.log^M"
+        start 1 "imp3" ""$H316" imp3.simh 2>imp3.log^M"
+        start 2 "imp4" ""$H316" imp4.simh 2>imp4.log^M"
         sleep 30
-        start 3 "ncp2" "NCP=ncp2 ../src/ncp localhost 22001 22002 2>ncp2.log^M"
-        start 4 "ncp3" "NCP=ncp3 ../src/ncp localhost 22003 22004 2>ncp3.log^M"
+        start 3 "ncp2" "NCP=ncp2 "$NCPD" localhost 22001 22002 2>ncp2.log^M"
+        start 4 "ncp3" "NCP=ncp3 "$NCPD" localhost 22003 22004 2>ncp3.log^M"
         ;;
     attach)
         screen -S arpanet -x
@@ -41,8 +44,8 @@ case "$1" in
         stop 3 "^C"
         stop 4 "^C"
         screen -S arpanet -X quit
-        pkill h316
-        pkill ncp
+        pkill `basename "$H316"`
+        pkill `basename "$NCPD"`
         rm -f ncp2 ncp3
         ;;
     *)
