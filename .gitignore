@@ -6,4 +6,5 @@ apps/ncp-ping
 apps/ncp-finger
 apps/ncp-finser
 apps/ncp-telnet
+apps/ncp-echo
 test/*.log
