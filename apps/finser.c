@@ -17,7 +17,7 @@ int main (int argc, char **argv)
   }
 
   if (ncp_init (NULL) == -1) {
-    fprintf (stderr, "NCP initializtion error: %s.\n", strerror (errno));
+    fprintf (stderr, "NCP initialization error: %s.\n", strerror (errno));
     if (errno == ECONNREFUSED)
       fprintf (stderr, "Is the NCP server started?\n");
     exit (1);
