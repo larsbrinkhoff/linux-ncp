@@ -7,4 +7,5 @@ apps/ncp-finger
 apps/ncp-finser
 apps/ncp-telnet
 apps/ncp-echo
+apps/ncp-discard
 test/*.log
