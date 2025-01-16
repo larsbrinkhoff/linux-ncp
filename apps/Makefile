@@ -4,8 +4,10 @@ NCP=-L../src -lncp
 LIBNCP=../src/libncp.a
 PREFIX=ncp-
 
-all: $(PREFIX)ping $(PREFIX)finger $(PREFIX)finser $(PREFIX)telnet \
-     $(PREFIX)echo $(PREFIX)discard
+APPS=ping finger finser telnet echo discard
+PROGS=$(foreach i,$(APPS),$(PREFIX)$(i))
+
+all: $(PROGS)
 
 $(PREFIX)ping: ping.o $(LIBNCP)
 	$(CC) -o $@ $< $(NCP)
@@ -26,3 +28,7 @@ $(PREFIX)discard: discard.o $(LIBNCP)
 	$(CC) -o $@ discard.o $(NCP)
 
 tty.o:: tty.h
+
+.PHONY: clean
+clean:
+	rm -f $(PROGS) *.o
