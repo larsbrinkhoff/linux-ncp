@@ -898,9 +898,9 @@ static int process_cls (uint8_t source, uint8_t *data)
     fprintf (stderr, "NCP: Connection %u refused.\n", i);
     reply_open (source, rsock, 0, 255);
   } else if (connection[i].flags & CONN_READ) {
-    reply_read (source, packet, 0);
+    reply_read (i, packet, 0);
   } else if (connection[i].flags & CONN_WRITE) {
-    reply_write (source, 0);
+    reply_write (i, 0);
   }
 
   if (CONN_GOT_RCV_CLS(i, ==) && CONN_SENT_RCV_CLS(i, ==) &&
