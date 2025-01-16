@@ -20,6 +20,7 @@
 #define ERP_TIMEOUT    20
 #define ALL_TIMEOUT    60
 #define RFC_TIMEOUT     3
+#define CLS_TIMEOUT     3
 
 #define IMP_REGULAR       0
 #define IMP_LEADER_ERROR  1
@@ -93,6 +94,7 @@ static void send_rts (int i);
 static void send_str (int i);
 static void send_cls_rcv (int i);
 static void send_cls_snd (int i);
+static void cls_timeout (int i);
 
 static int fd;
 static struct sockaddr_un server;
@@ -125,6 +127,8 @@ struct
   unsigned long all_time;
   void (*rfc_timeout) (int);
   unsigned long rfc_time;
+  void (*cls_timeout) (int);
+  unsigned long cls_time;
   uint8_t buffer[1024];
   uint8_t *ptr;
   int length, remaining;
@@ -288,6 +292,7 @@ static void destroy (int i)
   connection[i].rfnm_callback = NULL;
   connection[i].rfnm_timeout = NULL;
   connection[i].rfc_timeout = NULL;
+  connection[i].cls_timeout = NULL;
 }
 
 static void send_imp (int flags, int type, int destination, int link, int id,
@@ -560,6 +565,12 @@ static void unless_rfc (int i, void (*to) (int))
   connection[i].rfc_time = time_tick + RFC_TIMEOUT;
 }
 
+static void unless_cls (int i, void (*to) (int))
+{
+  connection[i].cls_timeout = to;
+  connection[i].cls_time = time_tick + CLS_TIMEOUT;
+}
+
 static uint32_t sock (uint8_t *data)
 {
   uint32_t x;
@@ -614,7 +625,9 @@ static void reply_close (uint8_t i)
   connection[i].flags &= ~CONN_CLOSE;
   reply[0] = WIRE_CLOSE+1;
   reply[1] = i;
-  if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
+  if (sendto (fd, reply, sizeof reply, 0,
+              (struct sockaddr *)&connection[i].client.addr,
+              connection[i].client.len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
 }
@@ -638,6 +651,21 @@ static void send_socket_timeout (int i)
   CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].snd.lsock, connection[i].snd.rsock);
+  unless_cls (i, cls_timeout);
+}
+
+static void cls_timeout (int i)
+{
+  fprintf (stderr, "NCP: Timeout waiting for CLS, connection %d.\n", i);
+  if (connection[i].flags & CONN_OPEN)
+    reply_open (connection[i].host, connection[i].listen, 0, 255);
+  else if (connection[i].flags & CONN_READ)
+    reply_read (i, packet, 0);
+  else if (connection[i].flags & CONN_WRITE)
+    reply_write (i, 0);
+  else if (connection[i].flags & CONN_CLOSE)
+    reply_close (i);
+  destroy (i);
 }
 
 static void rfc_timeout (int i)
@@ -650,11 +678,13 @@ static void rfc_timeout (int i)
     CONN_SENT_RCV_CLS(i, =);
     ncp_cls (connection[i].host,
              connection[i].rcv.lsock, connection[i].rcv.rsock);
+    unless_cls (i, cls_timeout);
   }
   if (connection[i].snd.link != -1) {
     CONN_SENT_SND_CLS(i, =);
     ncp_cls (connection[i].host,
              connection[i].snd.lsock, connection[i].snd.rsock);
+    unless_cls (i, cls_timeout);
   }
 }
 
@@ -749,7 +779,7 @@ static int process_rts (uint8_t source, uint8_t *data)
       i = make_open (source, 0, 0, lsock, rsock);
       connection[i].snd.size = 0;
       ncp_cls (source, lsock, rsock);
-      unless_rfc (i, just_drop);
+      unless_cls (i, cls_timeout);
     } else {
       j = make_open (source, lsock-1, rsock+1, lsock, rsock);
       connection[j].snd.size = 8;
@@ -802,7 +832,6 @@ static int process_str (uint8_t source, uint8_t *data)
       if (connection[i].flags & CONN_CLIENT) {
         ncp_all (source, connection[i].rcv.link, 1, 1000);
       } else {
-        connection[i].rfc_timeout = NULL;
         maybe_reply (i);
       }
     } else {
@@ -829,7 +858,7 @@ static int process_str (uint8_t source, uint8_t *data)
       i = make_open (source, 0, 0, lsock, rsock);
       connection[i].snd.size = 0;
       ncp_cls (source, lsock, rsock);
-      unless_rfc (i, just_drop);
+      unless_cls (i, cls_timeout);
     } else {
       j = make_open (source, lsock, rsock, lsock+1, rsock-1);
       connection[j].rcv.size = size;
@@ -916,6 +945,14 @@ static int process_cls (uint8_t source, uint8_t *data)
 static void just_drop (int i)
 {
   fprintf (stderr, "NCP: RFNM timeout, drop connection %d.\n", i);
+  if (connection[i].flags & CONN_OPEN)
+    reply_open (connection[i].host, connection[i].listen, 0, 255);
+  else if (connection[i].flags & CONN_READ)
+    reply_read (i, packet, 0);
+  else if (connection[i].flags & CONN_WRITE)
+    reply_write (i, 0);
+  else if (connection[i].flags & CONN_CLOSE)
+    reply_close (i);
   destroy (i);
 }
 
@@ -979,6 +1016,7 @@ static void send_cls_snd (int i)
   CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].snd.lsock, connection[i].snd.rsock);
+  unless_cls (i, cls_timeout);
 }
 
 static void send_cls_rcv (int i)
@@ -989,6 +1027,7 @@ static void send_cls_rcv (int i)
   CONN_SENT_RCV_CLS(i, =);
   ncp_cls (connection[i].host,
            connection[i].rcv.lsock, connection[i].rcv.rsock);
+  unless_cls (i, cls_timeout);
 }
 
 static void send_socket (int i)
@@ -1511,6 +1550,7 @@ static void app_open (void)
   i = make_open (host, 1002, socket, 0, 0);
   connection[i].rcv.link = 42; //Receive link.
   connection[i].flags |= CONN_CLIENT | CONN_OPEN;
+  connection[i].listen = socket;
   memcpy (&connection[i].client.addr, &client, len);
   connection[i].client.len = len;
 
@@ -1622,10 +1662,13 @@ static void app_close (void)
   fprintf (stderr, "NCP: Application close, connection %u.\n", i);
   connection[i].flags &= ~CONN_APPS;
   connection[i].flags |= CONN_CLOSE;
+  memcpy (&connection[i].client.addr, &client, len);
+  connection[i].client.len = len;
   CONN_SENT_RCV_CLS(i, =);
   CONN_SENT_SND_CLS(i, =);
   ncp_cls (connection[i].host, connection[i].rcv.lsock, connection[i].rcv.rsock);
   ncp_cls (connection[i].host, connection[i].snd.lsock, connection[i].snd.rsock);
+  unless_cls (i, cls_timeout);
 }
 
 static void application (void)
@@ -1690,6 +1733,12 @@ static void tick (void)
     if (to != NULL && connection[i].rfc_time == time_tick) {
       connection[i].rfc_timeout = NULL;
       connection[i].rfc_time = time_tick - 1;
+      to (i);
+    }
+    to = connection[i].cls_timeout;
+    if (to != NULL && connection[i].cls_time == time_tick) {
+      connection[i].cls_timeout = NULL;
+      connection[i].cls_time = time_tick - 1;
       to (i);
     }
   }
