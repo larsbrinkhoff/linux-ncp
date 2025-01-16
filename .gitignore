@@ -2,10 +2,10 @@
 *.o
 src/ncpd
 src/libncp.a
-apps/ncp-ping
-apps/ncp-finger
-apps/ncp-finser
-apps/ncp-telnet
 apps/ncp-echo
 apps/ncp-discard
+apps/ncp-finger
+apps/ncp-finser
+apps/ncp-ping
+apps/ncp-telnet
 test/*.log
