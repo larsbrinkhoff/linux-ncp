@@ -55,17 +55,31 @@
 static pid_t reader_pid = 0;
 static pid_t writer_pid = 0;
 
-static char client_options[] = {
+static const unsigned char old_client_options[] = {
+  OECHO, NUL
+};
+
+static const unsigned char old_server_options[] = {
+  ONOECHO, NUL
+};
+
+static const unsigned char new_client_options[] = {
   IAC, DO, OPT_ECHO,
   IAC, DO, OPT_SUPPRESS_GO_AHEAD,
   IAC, WILL, OPT_SUPPRESS_GO_AHEAD,
+  NUL
 };
 
-static char server_options[] = {
+static const unsigned char new_server_options[] = {
   IAC, DONT, OPT_ECHO,
   IAC, DO, OPT_SUPPRESS_GO_AHEAD,
   IAC, WILL, OPT_SUPPRESS_GO_AHEAD,
   IAC, WILL, OPT_ECHO,
+  NUL
+};
+
+static const unsigned char bin_options[] = {
+  NUL
 };
 
 static void option (int fd)
@@ -214,6 +228,12 @@ static void process_old (unsigned char data, int rfd, int wfd)
   }
 }
 
+static void process_bin (unsigned char data, int rfd, int wfd)
+{
+  write (wfd, &data, 1);
+}
+
+
 static int reader (int connection)
 {
   unsigned char data[200];
@@ -289,7 +309,8 @@ static int writer (int connection)
 }
 
 static void telnet_client (int host, int sock,
-                           void (*process) (unsigned char, int, int))
+                           void (*process) (unsigned char, int, int),
+                           const unsigned char *options)
 {
   int connection;
   int reader_fd, writer_fd;
@@ -314,8 +335,8 @@ static void telnet_client (int host, int sock,
   reader_fd = reader (connection);
   writer_fd = writer (connection);
 
-  size = sizeof client_options;
-  if (write (writer_fd, client_options, size) == -1) {
+  size = strlen ((const char *)options);
+  if (write (writer_fd, options, size) == -1) {
     fprintf (stderr, "write error.\n");
     exit (1);
   }
@@ -357,8 +378,8 @@ static void telnet_client (int host, int sock,
   }
 }
 
-static void telnet_server (int sock, int new,
-                           void (*process) (unsigned char, int, int))
+static void telnet_server (int sock, void (*process) (unsigned char, int, int),
+                           const unsigned char *options)
 {
   int host, connection, size;
   int reader_fd, writer_fd;
@@ -372,8 +393,8 @@ static void telnet_server (int sock, int new,
   reader_fd = reader (connection);
   writer_fd = writer (connection);
 
-  size = sizeof server_options;
-  if (write (writer_fd, server_options, size) == -1) {
+  size = strlen ((const char *)options);
+  if (write (writer_fd, options, size) == -1) {
     fprintf (stderr, "write error.\n");
     exit (1);
   }
@@ -430,33 +451,51 @@ static void telnet_server (int sock, int new,
   }
 }
 
-static void usage (const char *argv0)
+static void usage (const char *argv0, int code)
 {
-  fprintf (stderr, "Usage: %s -c[no] host\n"
-           "or     %s -s[no]\n", argv0, argv0);
+  fprintf (stderr, "Usage: %s -c[bno] host\n"
+           "or %s -s[bno]\n", argv0, argv0);
+  if (code >= 0)
+    exit (code);
 }
 
 int main (int argc, char **argv)
 {
-  int opt, client = 1, server = 0, old = 0, new = 1;
+  void (*process) (unsigned char, int, int) = NULL;
+  const unsigned char *client_options;
+  const unsigned char *server_options;
+  int opt, client = 1, server = 0;
   int host = -1;
   int sock = -1;
 
-  while ((opt = getopt (argc, argv, "cnosp:")) != -1) {
+  while ((opt = getopt (argc, argv, "bcnosp:")) != -1) {
     switch (opt) {
+    case 'b':
+      if (process != NULL)
+        usage (argv[0], 1);
+      process = process_bin;
+      client_options = bin_options;
+      server_options = bin_options;
+      break;
     case 'c':
       client = 1;
       server = 0;
       break;
     case 'n':
-      new = 1;
-      old = 0;
+      if (process != NULL)
+        usage (argv[0], 1);
+      process = process_new;
+      client_options = new_client_options;
+      server_options = new_server_options;
       if (sock == -1)
         sock = NEW_TELNET;
       break;
     case 'o':
-      new = 0;
-      old = 1;
+      if (process != NULL)
+        usage (argv[0], 1);
+      process = process_old;
+      client_options = old_client_options;
+      server_options = old_server_options;
       if (sock == -1)
         sock = OLD_TELNET;
       break;
@@ -468,21 +507,18 @@ int main (int argc, char **argv)
       server = 1;
       break;
     default:
-      usage (argv[0]);
-      exit (1);
+      usage (argv[0], 1);
     }
   }
 
   if (client)
     host = atoi (argv[optind++]);
 
-  if (argc != optind || (client && server) || (new && old)) {
-    usage(argv[0]);
-    exit (1);
-  }
+  if (argc != optind || (client && server))
+    usage(argv[0], 1);
 
   if (sock == -1)
-    sock = old ? OLD_TELNET : NEW_TELNET;
+    sock = NEW_TELNET;
 
   if (ncp_init (NULL) == -1) {
     fprintf (stderr, "NCP initialization error: %s.\n", strerror (errno));
@@ -492,9 +528,9 @@ int main (int argc, char **argv)
   }
 
   if (client)
-    telnet_client (host, sock, new ? process_new : process_old);
+    telnet_client (host, sock, process, client_options);
   else if (server)
-    telnet_server (sock, new, new ? process_new : process_old);
+    telnet_server (sock, process, server_options);
 
   return 0;
 }
