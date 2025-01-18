@@ -27,7 +27,8 @@ int main (int argc, char **argv)
 
   printf ("Finger host %03o.\n", host);
 
-  switch (ncp_open (host, 0117, &connection)) {
+  size = 8;
+  switch (ncp_open (host, 0117, &size, &connection)) {
   case 0:
     break;
   case -1:

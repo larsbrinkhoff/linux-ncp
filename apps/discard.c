@@ -13,7 +13,8 @@ static void discard_server (int sock)
   int host, connection, size;
   char buffer[1000];
 
-  if (ncp_listen (sock, &host, &connection) == -1) {
+  size = 8;
+  if (ncp_listen (sock, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }

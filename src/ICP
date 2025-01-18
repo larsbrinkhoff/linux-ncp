@@ -1,0 +1,84 @@
+
+
+Server
+
+1. incoming RTS1
+2. reply STR1
+3. wait for ALL
+4. data S
+5. CLS
+6. be ready to accept new STR2+RTS2
+7. send new STR3+RTS3
+8. wait for reply STR2+RTS2
+
+After RTS1, send STR1.
+After STR1, expect ALL.
+After ALL, send data S, send CLS.
+After send data S, expect CLS, RTS2, STR2.
+
+Client
+
+1. send RTS1
+2. wait for STR1
+3. be ready accept new STR2+RTS2
+4. send ALL
+5. wait for data
+6. send new STR3+RTS3
+7. wait for reply STR2+RTS2
+
+Send RTS1, expect STR1, STR2, RTS2.
+After STR1, send ALL, expect data S, STR2, RTS2.
+After data S, send CLS, send STR2, send RTS2, expect STR2, expect RTS2.
+
+RTS->STR->ALL->data->CLS
+
+RTS->STR2+STR2
+
+Server
+
+  Incoming RTS:
+  - ICP initial (first message)
+  - or ICP primary
+  Incoming STR:
+  - ICP primary
+  Incoming ALL:
+  - ICP
+  - or not
+  Incoming CLS:
+  - ICP
+  - remote closing
+  - reply to CLS
+
+Client
+
+  Incoming STR:
+  - ICP initial (reply to first RTS)
+  - or ICP primary
+  Incoming RTS:
+  - ICP primary
+  Incoming data:
+  - ICP
+  - or not
+  Incoming CLS:
+  - ICP
+  - remote closing
+  - reply to CLS
+
+Both
+
+  Incoming RTS:
+  - If listening to L, start ICP.
+  - Else new connection.
+  Incoming STR:
+  - Confirm start ICP.
+  - Else new connection.
+  Incoming ALL:
+  - Allocation for ICP.
+  - Else allocation for regular data.
+  Incoming data:
+  - S for ICP.
+  - Else regular data.
+  Incoming CLS:
+  - Close ICP link.
+  - Remote closing link.
+  - Confirm closing link.
