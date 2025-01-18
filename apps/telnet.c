@@ -239,6 +239,7 @@ static int reader (int connection)
   unsigned char data[200];
   int fds[2];
   int size;
+  ssize_t n;
 
   if (pipe (fds) == -1)
     exit (1);
@@ -261,7 +262,10 @@ static int reader (int connection)
     }
     if (size == 0)
       exit (0);
-    if (write (fds[1], data, size) == -1)
+    n = write (fds[1], data, size);
+    if (n == 0)
+      exit (0);
+    if (n < 0)
       exit (1);
   }
 }
@@ -283,9 +287,6 @@ static int writer (int connection)
   }
   close (fds[1]);
 
-  int flags = fcntl (fds[0], F_GETFL);
-  fcntl (fds[0], F_SETFL, flags | O_NONBLOCK);
-
   if (ncp_init (NULL) == -1)
     exit (1);
 
@@ -294,7 +295,7 @@ static int writer (int connection)
     if (n == 0)
       exit (0);
     if (n < 0)
-      continue;
+      exit (1);
     ptr = data;
     for (ptr = data, m = n; m > 0; ptr += size, m -= size) {
       size = m;
@@ -353,16 +354,20 @@ static void telnet_client (int host, int sock,
 
     if (FD_ISSET (0, &rfds)) {
       unsigned char data;
-      read (0, &data, 1);
+      if (read (0, &data, 1) <= 0)
+        goto end;
       if (data == 035)
         goto end;
-      write (writer_fd, &data, 1);
+      if (write (writer_fd, &data, 1) <= 0)
+        goto end;
     }
     if (FD_ISSET (reader_fd, &rfds)) {
       unsigned char data;
       n = read (reader_fd, &data, 1);
       if (n == 1)
         process (data, reader_fd, 1);
+      if (n <= 0)
+        goto end;
     }
   }
 
@@ -385,6 +390,7 @@ static void telnet_server (int sock, void (*process) (unsigned char, int, int),
   int reader_fd, writer_fd;
   char *banner;
 
+  fprintf (stderr, "Listening to socket %d.\n", sock);
   if (ncp_listen (sock, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
