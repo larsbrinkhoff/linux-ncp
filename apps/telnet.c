@@ -319,8 +319,6 @@ static void telnet_client (int host, int sock,
 
   printf ("TELNET to host %03o.\n", host);
 
-  tty_raw ();
-
   switch (ncp_open (host, sock, &connection)) {
   case 0:
     break;
@@ -341,6 +339,8 @@ static void telnet_client (int host, int sock,
     fprintf (stderr, "write error.\n");
     exit (1);
   }
+
+  tty_raw ();
 
   for (;;) {
     fd_set rfds;
