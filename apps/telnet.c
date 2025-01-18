@@ -357,7 +357,7 @@ static void telnet_client (int host, int sock,
       if (read (0, &data, 1) <= 0)
         goto end;
       if (data == 035)
-        goto end;
+        goto quit;
       if (write (writer_fd, &data, 1) <= 0)
         goto end;
     }
@@ -371,11 +371,12 @@ static void telnet_client (int host, int sock,
     }
   }
 
+ quit:
+  printf ("TELNET> quit\r\n");
  end:
+  tty_restore ();
   kill (reader_pid, SIGTERM);
   kill (writer_pid, SIGTERM);
-  tty_restore ();
-  printf ("TELNET> quit\n");
 
   if (ncp_close (connection) == -1) {
     fprintf (stderr, "NCP close error.\n");
