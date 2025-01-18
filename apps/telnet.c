@@ -313,13 +313,14 @@ static void telnet_client (int host, int sock,
                            void (*process) (unsigned char, int, int),
                            const unsigned char *options)
 {
-  int connection;
+  int connection, byte_size;
   int reader_fd, writer_fd;
   size_t size;
 
   printf ("TELNET to host %03o.\n", host);
 
-  switch (ncp_open (host, sock, &connection)) {
+  byte_size = 8;
+  switch (ncp_open (host, sock, &byte_size, &connection)) {
   case 0:
     break;
   case -1:
@@ -392,7 +393,9 @@ static void telnet_server (int sock, void (*process) (unsigned char, int, int),
   char *banner;
 
   fprintf (stderr, "Listening to socket %d.\n", sock);
-  if (ncp_listen (sock, &host, &connection) == -1) {
+
+  size = 8;
+  if (ncp_listen (sock, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }

@@ -10,11 +10,12 @@
 
 static void echo_client (int host, int sock)
 {
-  int connection, n;
+  int connection, n, byte_size;
   char buffer[1000], *ptr;
   ssize_t size;
 
-  switch (ncp_open (host, sock, &connection)) {
+  size = 8;
+  switch (ncp_open (host, sock, &byte_size, &connection)) {
   case 0:
     break;
   case -1:
@@ -66,7 +67,8 @@ static void echo_server (int sock)
   int host, connection, size, n;
   char buffer[1000], *ptr;
 
-  if (ncp_listen (sock, &host, &connection) == -1) {
+  size = 8;
+  if (ncp_listen (sock, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }

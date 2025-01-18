@@ -114,7 +114,7 @@ struct
   client_t client, reader, writer;
   int host;
   unsigned flags;
-  int listen;
+  int listen, data_size;
   int all_msgs, all_bits;
   struct { int link, size; uint32_t lsock, rsock; } rcv, snd;
   void (*rrp_callback) (int);
@@ -139,6 +139,7 @@ struct
 {
   client_t client;
   uint32_t sock;
+  uint8_t size;
 } listening[CONNECTIONS];
 
 // Notes which hosts are considered alive.
@@ -582,9 +583,10 @@ static uint32_t sock (uint8_t *data)
   return x;
 }
 
-static void reply_open (uint8_t host, uint32_t socket, uint8_t i, uint8_t e)
+static void reply_open (uint8_t host, uint32_t socket, uint8_t i,
+                        uint8_t size, uint8_t e)
 {
-  uint8_t reply[8];
+  uint8_t reply[9];
   fprintf (stderr, "NCP: Application open reply socket %u on host %03o: "
            "connection %u, error %u.\n", socket, host, i, e);
   connection[i].flags &= ~CONN_OPEN;
@@ -595,15 +597,17 @@ static void reply_open (uint8_t host, uint32_t socket, uint8_t i, uint8_t e)
   reply[4] = socket >> 8;
   reply[5] = socket;
   reply[6] = i;
-  reply[7] = e;
+  reply[7] = size;
+  reply[8] = e;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
 }
 
-static void reply_listen (uint8_t host, uint32_t socket, uint8_t i)
+static void reply_listen (uint8_t host, uint32_t socket, uint8_t i,
+                          uint8_t size)
 {
-  uint8_t reply[7];
+  uint8_t reply[8];
   fprintf (stderr, "NCP: Application listen reply socket %u on host %03o: "
            "connection %u.\n", socket, host, i);
   connection[i].flags &= ~CONN_LISTEN;
@@ -614,6 +618,7 @@ static void reply_listen (uint8_t host, uint32_t socket, uint8_t i)
   reply[4] = socket >> 8;
   reply[5] = socket;
   reply[6] = i;
+  reply[7] = size;
   if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
     fprintf (stderr, "NCP: sendto %s error: %s.\n",
              client.sun_path, strerror (errno));
@@ -638,11 +643,13 @@ static void maybe_reply (int i)
   if ((connection[i].flags & CONN_GOT_BOTH) == CONN_GOT_BOTH) {
     fprintf (stderr, "NCP: Server got both RTS and STR from client.\n");
     connection[i].rfc_timeout = NULL;
-    reply_listen (connection[i].host, connection[i].listen, i);
+    reply_listen (connection[i].host, connection[i].listen, i,
+                  connection[i].rcv.size);
   } else if ((connection[i].flags & CONN_GOT_ALL) == CONN_GOT_ALL) {
     fprintf (stderr, "NCP: Client got RTS, STR, and socket from server.\n");
     connection[i].rfc_timeout = NULL;
-    reply_open (connection[i].host, connection[i].listen, i, 0);
+    reply_open (connection[i].host, connection[i].listen, i,
+                connection[i].rcv.size, 0);
   }
 }
 
@@ -659,7 +666,7 @@ static void cls_timeout (int i)
 {
   fprintf (stderr, "NCP: Timeout waiting for CLS, connection %d.\n", i);
   if (connection[i].flags & CONN_OPEN)
-    reply_open (connection[i].host, connection[i].listen, 0, 255);
+    reply_open (connection[i].host, connection[i].listen, 0, 0, 255);
   else if (connection[i].flags & CONN_READ)
     reply_read (i, packet, 0);
   else if (connection[i].flags & CONN_WRITE)
@@ -707,13 +714,14 @@ static int process_rts (uint8_t source, uint8_t *data)
     return 9;
   }
 
-  if (find_listen (lsock) != -1) {
+  if ((i = find_listen (lsock)) != -1) {
     /* A server is listening to this socket, and a client has sent the
        RTS to initiate a new connection.  Reply with an STR for the
        initial part of ICP, which is to send the server data
        connection socket. */
     uint8_t tmp[4];
     uint32_t s = 0200;
+    int size = listening[i].size;
     i = make_open (source, 0, 0, lsock, rsock);
     fprintf (stderr, "NCP: Listening to %u: new connection %d, link %u.\n",
              lsock, i, link);
@@ -739,7 +747,7 @@ static int process_rts (uint8_t source, uint8_t *data)
                    s, connection[i].snd.rsock+3,
                    s+1, connection[i].snd.rsock+2);
     connection[j].flags |= CONN_LISTEN;
-    connection[j].snd.size = 8;
+    connection[j].snd.size = size;
     connection[j].rcv.link = 46;
     connection[j].rcv.size = connection[j].snd.link = 0;
     connection[j].listen = lsock;
@@ -783,7 +791,7 @@ static int process_rts (uint8_t source, uint8_t *data)
       unless_cls (i, cls_timeout);
     } else {
       j = make_open (source, lsock-1, rsock+1, lsock, rsock);
-      connection[j].snd.size = 8;
+      connection[j].snd.size = connection[i].data_size;
       connection[j].snd.link = link;
       connection[j].rcv.link = 49;
       connection[j].flags |= CONN_OPEN | CONN_GOT_RTS;
@@ -864,7 +872,7 @@ static int process_str (uint8_t source, uint8_t *data)
       j = make_open (source, lsock, rsock, lsock+1, rsock-1);
       connection[j].rcv.size = size;
       connection[j].rcv.link = 47;
-      connection[j].snd.size = 8;
+      connection[j].snd.size = connection[i].data_size;
       connection[j].flags |= CONN_OPEN | CONN_GOT_STR;
       connection[j].listen = connection[i].rcv.rsock;
       fprintf (stderr, "NCP: New connection %d sockets %d:%d %d:%d link %d\n",
@@ -926,7 +934,7 @@ static int process_cls (uint8_t source, uint8_t *data)
 
   if (connection[i].flags & CONN_OPEN) {
     fprintf (stderr, "NCP: Connection %u refused.\n", i);
-    reply_open (source, rsock, 0, 255);
+    reply_open (source, rsock, 0, 0, 255);
   } else if (connection[i].flags & CONN_READ) {
     reply_read (i, packet, 0);
   } else if (connection[i].flags & CONN_WRITE) {
@@ -947,7 +955,7 @@ static void just_drop (int i)
 {
   fprintf (stderr, "NCP: RFNM timeout, drop connection %d.\n", i);
   if (connection[i].flags & CONN_OPEN)
-    reply_open (connection[i].host, connection[i].listen, 0, 255);
+    reply_open (connection[i].host, connection[i].listen, 0, 0, 255);
   else if (connection[i].flags & CONN_READ)
     reply_read (i, packet, 0);
   else if (connection[i].flags & CONN_WRITE)
@@ -1183,7 +1191,7 @@ static int process_err (uint8_t source, uint8_t *data)
     if (i != -1) {
       if ((rsock & 1) == 0)
         rsock--;
-      reply_open (source, rsock, 0, 255);
+      reply_open (source, rsock, 0, 0, 255);
       destroy (i);
     }
   }
@@ -1326,7 +1334,7 @@ static void process_regular (uint8_t *packet, int length)
         j = make_open (source,
                        connection[i].rcv.lsock+2, s+1,
                        connection[i].rcv.lsock+3, s);
-        connection[j].snd.size = 8;
+        connection[j].snd.size = connection[i].data_size;
         connection[j].rcv.link = 45;
         fprintf (stderr, "NCP: New connection %d.\n", j);
         when_rfnm (j, send_str_and_rts, rfnm_timeout);
@@ -1530,7 +1538,7 @@ static void app_echo (void)
 static void app_open_rfc_failed (int i)
 {
   fprintf (stderr, "NCP: Timed out completing RFC for connection %d.\n", i);
-  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 255);
+  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 0, 255);
   when_rfnm (i, send_cls_rcv, just_drop);
 }
 
@@ -1546,22 +1554,24 @@ static void app_open_rts (int i)
 static void app_open_fail (int i)
 {
   fprintf (stderr, "NCP: Timed out waiting for RRP.\n");
-  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 255);
+  reply_open (connection[i].host, connection[i].rcv.rsock, 0, 0, 255);
 }
 
 static void app_open (void)
 {
   uint32_t socket;
   uint8_t host = app[1];
-  int i;
+  int i, size;
 
   socket = app[2] << 24 | app[3] << 16 | app[4] << 8 | app[5];
-  fprintf (stderr, "NCP: Application open socket %u on host %03o.\n",
-           socket, host);
+  size = app[6];
+  fprintf (stderr, "NCP: Application open socket %u, byte size %d, on host %03o.\n",
+           socket, size, host);
 
   // Initiate a connection.
   i = make_open (host, 1002, socket, 0, 0);
   connection[i].rcv.link = 42; //Receive link.
+  connection[i].data_size = size; //Byte size for data connection.
   connection[i].flags |= CONN_CLIENT | CONN_OPEN;
   connection[i].listen = socket;
   memcpy (&connection[i].client.addr, &client, len);
@@ -1580,22 +1590,25 @@ static void app_open (void)
 static void app_listen (void)
 {
   uint32_t socket;
-  int i;
+  int i, size;
 
   socket = app[1] << 24 | app[2] << 16 | app[3] << 8 | app[4];
-  fprintf (stderr, "NCP: Application listen to socket %u.\n", socket);
+  size = app[5];
+  fprintf (stderr, "NCP: Application listen to socket %u, byte size %d.\n",
+           socket, size);
   if (find_listen (socket) != -1) {
     fprintf (stderr, "NCP: Alreay listening to %d.\n", socket);
-    reply_listen (0, socket, 0);
+    reply_listen (0, socket, 0, 0);
     return;
   }
   i = find_listen (0);
   if (i == -1) {
     fprintf (stderr, "NCP: Table full.\n");
-    reply_listen (0, socket, 0);
+    reply_listen (0, socket, 0, 0);
     return;
   }
   listening[i].sock = socket;
+  listening[i].size = size;
   memcpy (&connection[i].client.addr, &client, len);
   connection[i].client.len = len;
 }

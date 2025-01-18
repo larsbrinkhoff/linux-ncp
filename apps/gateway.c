@@ -138,7 +138,7 @@ static void tcp_to_ncp (const char *port, const char *host, const char *sock)
 {
   char *foreign_host;
   int connection, foreign_port;
-  int fd, s;
+  int fd, s, size;
 
   s = inet_server (port);
   fd = inet_accept (s, &foreign_host, &foreign_port);
@@ -148,7 +148,8 @@ static void tcp_to_ncp (const char *port, const char *host, const char *sock)
   int ncp_host = atoi (host);
   int ncp_sock = atoi (sock);
 
-  switch (ncp_open (ncp_host, ncp_sock, &connection)) {
+  size = 8;
+  switch (ncp_open (ncp_host, ncp_sock, &size, &connection)) {
   case 0:
     break;
   case -1:
@@ -170,9 +171,10 @@ static void tcp_to_ncp (const char *port, const char *host, const char *sock)
 
 static void ncp_to_tcp (int sock, const char *host, const char *port)
 {
-  int fd, ncp_host, connection;
+  int fd, ncp_host, connection, size;
 
-  if (ncp_listen (sock, &ncp_host, &connection) == -1) {
+  size = 8;
+  if (ncp_listen (sock, &size, &ncp_host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }

@@ -109,7 +109,7 @@ static int u32 (uint8_t *data)
   return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 }
 
-int ncp_open (int host, unsigned socket, int *connection)
+int ncp_open (int host, unsigned socket, int *size, int *connection)
 {
   type (WIRE_OPEN);
   add (host);
@@ -117,25 +117,28 @@ int ncp_open (int host, unsigned socket, int *connection)
   add (socket >> 16);
   add (socket >> 8);
   add (socket);
+  add (*size);
   if (transact () == -1)
     return -1;
   if (message[1] != host)
     return -1;
   if (u32 (message + 2) != socket)
     return -1;
-  if (message[7] == 255)
+  if (message[8] == 255)
     return -2;
   *connection = message[6];
+  *size = message[7];
   return 0;
 }
 
-int ncp_listen (unsigned socket, int *host, int *connection)
+int ncp_listen (unsigned socket, int *size, int *host, int *connection)
 {
   type (WIRE_LISTEN);
   add (socket >> 24);
   add (socket >> 16);
   add (socket >> 8);
   add (socket);
+  add (*size);
   if (transact () == -1)
     return -1;
   if (message[1] == 0)
@@ -144,6 +147,7 @@ int ncp_listen (unsigned socket, int *host, int *connection)
     return -1;
   *host = message[1];
   *connection = message[6];
+  *size = message[7];
   return 0;
 }
 

@@ -23,7 +23,8 @@ int main (int argc, char **argv)
     exit (1);
   }
 
-  if (ncp_listen (0117, &host, &connection) == -1) {
+  size = 8;
+  if (ncp_listen (0117, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }
