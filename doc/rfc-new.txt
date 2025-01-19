@@ -8,6 +8,13 @@ Obsoletes: 165, 636, 6529                                     April 2025
 
 Abstract
 
+ | The Internet community is challenged by ever changing protocols of
+ | increasing complexity.  The authors suggest the community might be
+ | better served by switching to a protocol that is simple and
+ | unlikely to ever change again.  Thus we present what is believed to
+ | be the last and final edition of the ARPA Network Host/Host
+ | Protocol.
+
    This document reproduces the Host/Host Protocol developed by the ARPA
    Network Working Group during 1969, 1970, and 1971.  It describes a
    protocol used to manage communication between processes residing on
@@ -302,6 +309,16 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    In addition to the above, several minor editorial changes have been
    made.
 
+ | This document supersedes RFC 6529 of the same title.  Principal
+ | differences between the documents include:
+ |
+ |    - clarifies non-control messages also have the header,
+ |    - a brief description of the Initial Connection Protocol
+ |      from RFC 165,
+ |    - addition of the RAR, RAS, RAP, NXR, and NXS opcodes from
+ |      RFC 636,
+ |    - assigned link numbers from RFC 1060.
+
    Although there are many individuals associated with the network who
    are knowledgeable about protocol issues, individuals with questions
    pertaining to Network protocols should initially contact one of the
@@ -402,7 +419,7 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    through wideband communications lines supplied by the telephone
    company.  Each IMP is programmed to store and forward messages to the
    neighboring IMPs in the network.  During a typical operation, a Host
-   passes a message to its local IMP; the first 32 bits of this message
+ | passes a message to its local IMP; the first 32 or 96 bits of this message
    include the "network address" of a destination Host.  The message is
    passed from IMP to IMP through the Network until it finally arrives
    at the destination IMP, which in turn passes it along to the
@@ -449,6 +466,8 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    1) An _Initial_Connection_Protocol_ (ICP) which provides a convenient
       standard method for several processes to gain simultaneous access
       to some specific process (such as the "logger") at another Host.
+ |    This protocol has since been adopted as the method to initiate
+ |    a communication path for all application protocols.
 
    2) A _Telecommunication_Network_ (TELNET) protocol which provides for
       the "mapping" of an arbitrary keyboard-printer terminal into a
@@ -476,7 +495,9 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
       over Hosts which provide batch processing facilities.
 
    The remainder of this document describes and specifies the Host/Host,
-   or second level, protocol as formulated by the Network Working Group.
+   or second level, protocol as formulated by the Network Working Group,
+ | as well as the Initial Connection Protocol that is now integral to the
+ | Host/Host protocol.
 
 
 
@@ -619,7 +640,8 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    that byte size, then the outer layer of protocol will not be
    implementable on that Host.
 
-   The IMP sub-network requires that the first 32 bits of each message
+ | The first version of the protocol on the IMP sub-network requires
+   that the first 32 bits of each message
    (called the leader) contain addressing information, including
    destination Host address and link number.  The second level protocol
    extends the required information at the beginning of each message to
@@ -628,9 +650,16 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    conveniently with 8-bit units of data or have word lengths of 18 or
    36 bits; 72 is the least common multiple of these lengths.  Thus, the
    length chosen for the message header should reduce bit-shifting
-   problems for many Hosts.  In addition to the leader, the message
+   problems for many Hosts.
+ | In 1976, the leader was extended to 96 bits, and the host was
+ | allowed to specify some number of 16-bit padding words between the
+ | leader and the message data portion.  With the longer header, the
+ | Host/Host header is 136 bits or more.
+   In addition to the leader, the message
    header includes a field giving the byte size used in the message, a
    field giving the number of bytes in the message, and "filler" fields.
+ | Note that the same message header applies to both control messages
+ | and regular messages containing data.
    The format of the message header is fully described in Section IV.
 
    Another major concern of the second level protocol is a method for
@@ -801,6 +830,68 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    _queueing_facility._  This is not, however, an absolute requirement
    of the protocol.
 
+ | _Initial_Connection_Protocol_
+ |
+ | RFC 165 specifies a protocol that allows a server to listen to some
+ | particular well-known socket number, and then establish two
+ | connections for full-duplex communication between the server and
+ | user processes.  To do this, first a temporary simplex connection
+ | is opened for the server to transfer a new socket number to the
+ | user.  Then this socket number is the basis for opening two new
+ | connections between the two processes, and the first connection is
+ | closed.
+ |
+ | Below, the well-known socket is called L.  The temporary connection
+ | is initiated by the user from socket U.  The new socket number is
+ | S, and the full-duplex connections are between S and U+3, and S+1
+ | and U+2.
+
+   Server                          User
+
+   S1: Listening on socket L.      U1: RTS (U, L, _l1_)
+
+   S2: Wait for match.             U2: Wait for match.
+
+   S3: STR (L, U, _s1_)
+
+   S4: Wait for allocation.        U3: ALL (_l1_, _m1_, _b1_)
+
+   S5: Send data S in_s1_ bit      U4: Receive data S in s1 bit bytes.
+       bytes as allowed by             _s1_ bit bytes.
+       allocation _m1_, _b1_).
+
+   S6: CLS (L, U)                  U5: CLS (U, L)
+
+   S7: RTS (S, U+3, _l2_)          U6: STR (U+3, S, _s2_)
+
+   S8: STR (S+1, U+2, _s3_)        U7: RTS (U+2, S+1, _l3_)
+
+   The labels here imply no ordering except that ordering required by
+   the Host-Host Protocol.  Note that steps S7 and S8 can be reversed as
+   can U6 and U7.  Also, notice that at any time after S2 the server
+   could initiate steps S7 and S8 in parallel with steps S3 through S6,
+   and that at any time after U4 the user could initiate steps U6 and U7
+   in parallel with step U5.
+
+   Following the above, ALL commands would be exchanged and data
+   transfers could begin.
+
+   At this level the parameters of the above ICP family are L, _m1_,
+   _b1_, _s1_, _s2_, _s3_, _l1_, _l2_, _l3_.
+
+   L is a well known socket number and will be specified for each type
+   of service.
+
+   m1 and b1 are allocation quantities for the transfer of a socket
+   number.
+
+      _m1_ is specified to be 1.
+      _b1_ is specified to be 32.
+      _s1_, _s2_, and _s3_ are byte sizes.  Only _s1_ is to be specified
+         as _s2_ and _s3_ are to be left to the process involved.
+      _s1_ is specified to be 32.
+
+      _l1_, _l2_, and _l3_ are links and are not specified.
 
    Connection Termination
    ======================
@@ -884,7 +975,7 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    afford to tie up indefinitely.  Second, a partially broken (or
    malicious) process in a foreign Host may send an unending stream of
    RFCs which the local Host wishes to refuse by sending CLS commands
-   and waiting for a match.  This could, in worst cases, require 2^32 !
+   and waiting for a match.  This could, in worst cases, require 2^32
    socket pairs to be stored before duplicates began to appear.
 
 
@@ -929,7 +1020,10 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    ============
 
    After a connection is established, the sending Host sends messages
-   over the agreed-upon link to the receiving Host.  The receiving NCP
+   over the agreed-upon link to the receiving Host.
+ | Those messages use the Host/Host header, and the byte size field must
+ | match the one from the STR used to set up the link.
+   The receiving NCP
    accepts messages from its IMP and queues them for its various
    processes.  Since it may happen that the messages arrive faster than
    they can be processed, some mechanism is required which permits the
@@ -985,10 +1079,11 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    and the "bit space" field are defined to be unsigned binary integers
    specifying the amounts by which the sender's message counter and bit
    counter (respectively) are to be incremented.  The receiver is
-   prohibited from incrementing the sender's counter above (2^16 - 1),
-   or the sender's bit counter above (2^32 - 1).  In general, this rule
-   will require the receiver to maintain counters which are incremented
-   and decremented according to the same rules as the sender's counters.
+   prohibited from incrementing the sender's message counter above
+   (2^16 - 1), or the sender's bit counter above (2^32 - 1).  In
+   general, this rule will require the receiver to maintain counters
+   which are incremented and decremented according to the same rules
+   as the sender's counters.
 
    The receiving Host may request that the sending Host return all or
    part of its current allocation.  The control command for this request
@@ -1048,6 +1143,55 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    their space more efficiently.  Such a Host will then need to use the
    GVB command when the input over a particular link comes faster than
    it is being processed.
+
+ | Some hosts may elect to implement the RAS, RAR, and RAP commands
+ | from RFC 636.  These commands add a mechanism to clear the message
+ | and bit alloctions.
+ |
+ |         8      8
+ |      +------------+
+ |      | RAS | link |
+ |      +------------+
+ |
+ | This command tells the receiver to clear allocations for the
+ | specified link.  The RAS command is sent from the Host sending on
+ | "link" to the Host receiving on "link".  This command may be sent
+ | whenever the sending Host desires to resynch the status information
+ | associated with the connection (and doesn't have a message in
+ | transit through the network).
+ |
+ |         8      8
+ |      +------------+
+ |      | RAR | link |
+ |      +------------+
+ |
+ | This command is sent in reply to RAS to acknowledge allocations
+ | have been reset.  The RAR command is sent from the Host receiving
+ | on "link" to the Host sending on "link" in response to an RAS.  It
+ | marks the completion of the connection resynchronization.  When the
+ | RAR is returned the connection is in the known state of having no
+ | messages in transit in either direction and the allocations are
+ | zero.  The receiving Host may then start afresh with a new
+ | allocation and normal message transmission can proceed.  Since the
+ | RAR may be sent ONLY in response to an RAS, there are no races in
+ | the resynchronization.  All of the initiative lies with the sending
+ | Host.
+ |
+ |         8      8
+ |      +------------+
+ |      | RAP | link |
+ |      +------------+
+ |
+ | This command is sent from receiver to sender to ask it to send an
+ | RAS.  If the receiving Host detects an anomalous situation, the RAP
+ | command is provided.  It constitutes a "suggestion" on the part of
+ | the receiving Host that the sending Host resynchronize; the sending
+ | Host is free to honor it or not as it sees fit.  Since there is no
+ | obligatory response to a RAP, the receiving Host may send them as
+ | frequently as it chooses and no harm can occur.  For example, if a
+ | message in excess of the allocate arrives, the receiving Host might
+ | send RAPs every few seconds until the sending Host replies with no
+ | fears of races if one or more RAPs pass a RAS in the network.
 
    Interrupts
    ==========
@@ -1236,26 +1380,32 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    ==============
 
    All Host-to-Host messages (i.e., messages of type zero) shall have a
-   header 72 bits long consisting of the following fields (see Figure
-   1):
+ | header that 72 bits long if 32-bit leaders are in use, or 136 bits
+ | plus padding if 96-bit leaders are in use.
+   The header consists of the following fields (see Figure 1):
 
-      Bits 1-32   Leader - The contents of this field must be
-                  constructed according to the specifications contained
+      Bits 1-32,  Leader - The contents of this field must be
+ |    or 1-96     constructed according to the specifications contained
                   in BBN Report Number 1822.
 
-      Bits 33-40  Field M1 - Must be zero.
+ |    Bits 96-N   If 96 bit leaders are in use, the host may insert
+ |                padding here.
 
-      Bits 41-48  Field S - Connection byte size.  This size must be
-                  identical to the byte size in the STR used in
+      Bits 33-40, Field M1 - Must be zero.
+      or N+1-N+8
+
+      Bits 41-48, Field S - Connection byte size.  This size must be
+      or N+9-N+17 identical to the byte size in the STR used in
                   establishing the connection.  If this message is being
                   transmitted over the control link the connection byte
                   size must be 8.
 
-      Bits 49-64  Field C - Byte Count.  This field specifies the number
-                  of bytes in the text portion of the message.  A zero
+      Bits 49-64, Field C - Byte Count.  This field specifies the number
+      or N+18-N+33 of bytes in the text portion of the message.  A zero
                   value in the C field is explicitly permitted.
 
-      Bits 65-72  Field M2 - Must be zero.
+      Bits 65-72, Field M2 - Must be zero.
+      or N+34-N+41
 
    Following the header, the message shall consist of a text field of C
    bytes, where each byte is S bits in length.  Following the text there
@@ -1354,12 +1504,38 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
       2-71           Available for connections
 
-      1, 72-190      Reserved - not for current use
+      1, 72-149      Reserved - not for current use
+
+ |    150            Xerox NS IDP
+ |
+ |    151            Unassigned
+ |
+ |    152            PARC Universal Protocol
+ |
+ |    153            TIP Status Reporting
+ |
+ |    154            TIP Accounting
+ |
+ |    155            Internet Protocol [regular]
+ |
+ |    156-158        Internet Protocol [experimental]
+ |
+ |    159            Figleaf Link
+ |
+ |    160            Blacker Local Network Protocol  
+ |
+ |    161-190        Unassigned
 
       191            To be used only for measurement work under the
                      direction of the Network Measurement Center at UCLA
 
-      192-255        Available for private experimental use.
+ |    192-194        Unassigned
+ |
+ |    195            ISO-IP       
+
+      196-247        Available for private experimental use.
+
+ |    248-255        Network Maintenance
 
 
    Control Messages
@@ -1540,6 +1716,36 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
    allocations in response to a GVB command.  This command may be sent
    only while the connection is established.
 
+ | RAR - Reset allocation by receiver
+ | ==================================
+ |
+ |         8      8
+ |      +------------+
+ |      | RAR | link |
+ |      +------------+
+ |
+ | Sent in reply to RAS to acknowledge allocations have been reset.
+ |
+ | RAS - Reset allocation by sender
+ | ================================
+ |
+ |         8      8
+ |      +------------+
+ |      | RAS | link |
+ |      +------------+
+ |
+ | Tells the receiver to clear allocations for the specified link.
+ |
+ | RAP - Reset allocation please
+ | =============================
+ |
+ |         8      8
+ |      +------------+
+ |      | RAP | link |
+ |      +------------+
+ |
+ | Sent from receiver to sender to ask it to send an RAS.
+
    INR - Interrupt by receiver
    ===========================
 
@@ -1687,6 +1893,28 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
            field are the message header followed by the first eight bits
            of text (if any) or zeros.
 
+ | NXR - Non-existent receive link
+ | ===============================
+ |
+ |         8      8
+ |      +------------+
+ |      | NXR | link |
+ |      +------------+
+ |
+ | Tells sender the link it used is non-existant.  On receipt of an
+ | NXR, the sender should close the connection.
+ |
+ | NXS - Non-existent send link
+ | ============================
+ |
+ |         8      8
+ |      +------------+
+ |      | NXS | link |
+ |      +------------+
+ |
+ | Tells receiver the link it used is non-existant.  On receipt of an
+ | NXS, the receiver should close the connection.
+
    Opcode Assignment
    =================
 
@@ -1707,6 +1935,11 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
       ERR = 11
       RST = 12
       RRP = 13
+      RAR = 14
+      RAS = 15
+      RAP = 16
+      NXR = 17
+      NXS = 18
 
 
    Control Command Summary
@@ -1800,6 +2033,30 @@ RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
         | RRP |
         +-----+
 
+ |         8      8
+ |      +------------+
+ |      | RAR | link |
+ |      +------------+
+ |
+ |         8      8
+ |      +------------+
+ |      | RAS | link |
+ |      +------------+
+ |
+ |         8      8
+ |      +------------+
+ |      | RAP | link |
+ |      +------------+
+ |
+ |         8      8
+ |      +------------+
+ |      | NXR | link |
+ |      +------------+
+ |
+ |         8      8
+ |      +------------+
+ |      | NXS | link |
+ |      +------------+
 
 
 
