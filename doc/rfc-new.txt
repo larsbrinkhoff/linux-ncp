@@ -1,14 +1,9 @@
-
-
-
-
-
-
-Independent Submission                                       A. McKenzie
-Request for Comments: 6529                                    S. Crocker
-Category: Historic                                            April 2012
-ISSN: 2070-1721
-
+Independent Submission                                      L. Brinkhoff
+Request for Comments: XXXX                                    N. Chiappa
+Category: Historic                                           A. McKenzie
+ISSN: XXXX-XXX                                                S. Crocker
+Obsoletes: 165, 636, 6529                                      J. Postel
+                                                              April 2025
 
                 Host/Host Protocol for the ARPA Network
 
@@ -40,7 +35,7 @@ Status of This Memo
 
    Information about the current status of this document, any errata,
    and how to provide feedback on it may be obtained at
-   http://www.rfc-editor.org/info/rfc6529.
+   http://www.rfc-editor.org/info/rfcXXXX.
 
 
 
@@ -55,9 +50,10 @@ Status of This Memo
 
 
 
-McKenzie & Crocker              Historic                        [Page 1]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 1]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 1]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
 Copyright Notice
@@ -111,9 +107,9 @@ Table of Contents
 
 
 
-McKenzie & Crocker              Historic                        [Page 2]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 2]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
 1.  Introduction
@@ -167,9 +163,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 3]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 3]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
 2.  A Few Comments on Nomenclature and Key Concepts
@@ -223,9 +219,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 4]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 4]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
 3.  Host/Host Protocol Document
@@ -279,9 +275,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 5]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 5]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                                   PREFACE
@@ -335,9 +331,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 6]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 6]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                               TABLE OF CONTENTS
@@ -391,9 +387,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 7]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 7]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                              I.  INTRODUCTION
@@ -447,9 +443,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 8]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 8]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    1) An _Initial_Connection_Protocol_ (ICP) which provides a convenient
@@ -503,9 +499,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                        [Page 9]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic             [Page 9]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                         II.  COMMUNICATION CONCEPTS
@@ -559,9 +555,10 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 10]
 McKenzie & Crocker              Historic                       [Page 10]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    In order to accomplish its tasks, the NCP of one Host must
@@ -615,9 +612,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 11]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 11]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    Host.  In particular, an outer layer of protocol may specify a byte
@@ -671,9 +668,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 12]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 12]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                             III.  NCP FUNCTIONS
@@ -727,9 +724,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 13]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 13]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    These terms apply only to data flow; control messages will, in
@@ -783,9 +780,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 14]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 14]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    with the NCP notifying the process as to whether the RFC were
@@ -839,9 +836,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 15]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 15]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    and sender have slightly different effects.  CLS commands sent by the
@@ -895,9 +892,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 16]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 16]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    Clearly, no Host is prepared to store (or search) this much
@@ -951,9 +948,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 17]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 17]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    associated with each connection, a _message_counter_ and a
@@ -1007,9 +1004,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 18]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 18]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    This command is sent only from the receiving Host to the sending
@@ -1063,9 +1060,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 19]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 19]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    the "interrupt" is not defined at this level, but is made available
@@ -1119,9 +1116,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 20]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 20]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    "unanswered."  Any of the following constitute an "answer" to an ECO:
@@ -1175,9 +1172,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 21]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 21]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    RST command to each of the 256 possible Host addresses; the IMP
@@ -1231,9 +1228,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 22]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 22]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
                       IV.  DECLARATIVE SPECIFICATIONS
@@ -1287,9 +1284,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 23]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 23]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    |<---------------------------32 bits--------------------------->|
@@ -1343,9 +1340,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 24]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 24]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    Link Assignment
@@ -1399,9 +1396,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 25]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 25]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    NOP - No operation
@@ -1455,9 +1452,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 26]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 26]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    connection is assigned with this command; the "link" field must be
@@ -1511,9 +1508,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 27]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 27]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    GVB - Give back
@@ -1567,9 +1564,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 28]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 28]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    INS - Interrupt by sender
@@ -1623,9 +1620,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 29]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 29]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
    errors the code field is zero and the data field is idiosyncratic to
@@ -1679,9 +1676,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 30]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 30]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
            failure of the NCP receiving it to wait for a response to an
@@ -1735,9 +1732,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 31]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 31]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
            8        32            32
@@ -1791,9 +1788,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 32]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 32]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
            8
@@ -1847,9 +1844,9 @@ RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
 
 
 
-McKenzie & Crocker              Historic                       [Page 33]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 33]
 
-RFC 6529         Host-Host Protocol for the ARPA Network      April 2012
+RFC XXXX         Host-Host Protocol for the ARPA Network      April 2012
 
 
 4.  Security Considerations
@@ -1870,6 +1867,10 @@ Authors' Addresses
    USA
    EMail: steve@stevecrocker.com
 
+   Noel Chiappa
+
+   Lars Brinkoff
+   Email: larsbrinkhoff@gmail.com
 
 
 
@@ -1899,9 +1900,5 @@ Authors' Addresses
 
 
 
-
-
-
-
-McKenzie & Crocker              Historic                       [Page 34]
+Brinkhoff, Chiappa, McKenzie & Crocker     Historic            [Page 34]
 
