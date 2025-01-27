@@ -192,9 +192,9 @@ static void process_old (unsigned char data, int rfd, int wfd)
   case 015:
     read (rfd, &data, 1);
     if (data == NUL)
-      write (1, crlf, 1);
+      write (wfd, crlf, 1);
     else if (data == 012)
-      write (1, crlf, 2);
+      write (wfd, crlf, 2);
     else
       fprintf (stderr, "[CR without LF or NUL]");
   case OMARK:
