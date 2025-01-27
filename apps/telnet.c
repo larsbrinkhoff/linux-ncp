@@ -530,6 +530,9 @@ int main (int argc, char **argv)
   if (sock == -1)
     sock = NEW_TELNET;
 
+  if (process == NULL)
+    process = process_new;
+
   if (ncp_init (NULL) == -1) {
     fprintf (stderr, "NCP initialization error: %s.\n", strerror (errno));
     if (errno == ECONNREFUSED)
