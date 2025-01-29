@@ -5,6 +5,8 @@
 #include <string.h>
 #include "ncp.h"
 
+#define SOCKET  0117
+
 int main (int argc, char **argv)
 {
   char command[1000];
@@ -26,7 +28,7 @@ int main (int argc, char **argv)
   }
 
   size = 8;
-  if (ncp_listen (0117, &size, &host, &connection) == -1) {
+  if (ncp_listen (SOCKET, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }
@@ -34,7 +36,13 @@ int main (int argc, char **argv)
   size = sizeof command;
   if (ncp_read (connection, command, &size) == -1) {
     fprintf (stderr, "NCP read error.\n");
-    exit (1);
+    if (ncp_close (connection) == -1)
+      fprintf (stderr, "NCP close error.\n");
+    goto unlisten;
+  }
+  if (size == 0) {
+    fprintf (stderr, "Connection closed.\n");
+    goto unlisten;
   }
   command[size] = 0;
 
@@ -42,14 +50,17 @@ int main (int argc, char **argv)
             "Sample response from Finger server.\r\n"
             "Data from client was: \"%s\".\r\n", command);
   size = strlen (reply);
-  if (ncp_write (connection, reply, &size) == -1) {
+  if (ncp_write (connection, reply, &size) == -1)
     fprintf (stderr, "NCP write error.\n");
-    exit (1);
-  }
 
-  if (ncp_close (connection) == -1) {
+  if (size != 0 && ncp_close (connection) == -1)
     fprintf (stderr, "NCP close error.\n");
+
+ unlisten:
+  if (ncp_unlisten (SOCKET) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
     exit (1);
   }
 
+  return 0;
 }
