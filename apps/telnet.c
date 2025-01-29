@@ -385,10 +385,11 @@ static void telnet_client (int host, int sock,
   }
 }
 
-static void telnet_server (int sock, void (*process) (unsigned char, int, int),
+static void telnet_server (int host, int sock,
+                           void (*process) (unsigned char, int, int),
                            const unsigned char *options)
 {
-  int host, connection, size;
+  int connection, size;
   int reader_fd, writer_fd;
   char *banner;
 
@@ -471,10 +472,14 @@ static void usage (const char *argv0, int code)
 
 int main (int argc, char **argv)
 {
+  void (*telnet) (int, int,
+                  void (*) (unsigned char, int, int),
+                  const unsigned char *) = NULL;
   void (*process) (unsigned char, int, int) = NULL;
-  const unsigned char *client_options;
-  const unsigned char *server_options;
-  int opt, client = 1, server = 0;
+  const unsigned char *client_options = NULL;
+  const unsigned char *server_options = NULL;
+  const unsigned char *options;
+  int opt;
   int host = -1;
   int sock = -1;
 
@@ -488,8 +493,9 @@ int main (int argc, char **argv)
       server_options = bin_options;
       break;
     case 'c':
-      client = 1;
-      server = 0;
+      if (telnet != NULL)
+        usage (argv[0], 1);
+      telnet = telnet_client;
       break;
     case 'n':
       if (process != NULL)
@@ -513,25 +519,32 @@ int main (int argc, char **argv)
       sock = atoi (optarg);
       break;
     case 's':
-      client = 0;
-      server = 1;
+      if (telnet != NULL)
+        usage (argv[0], 1);
+      telnet = telnet_server;
       break;
     default:
       usage (argv[0], 1);
     }
   }
 
-  if (client)
-    host = atoi (argv[optind++]);
-
-  if (argc != optind || (client && server))
-    usage(argv[0], 1);
-
+  /* These are the defaults. */
   if (sock == -1)
     sock = NEW_TELNET;
-
   if (process == NULL)
     process = process_new;
+  if (telnet == NULL)
+    telnet = telnet_client;
+  if (client_options == NULL)
+    client_options = new_client_options;
+  if (server_options == NULL)
+    server_options = new_server_options;
+
+  if (telnet == telnet_client)
+    host = atoi (argv[optind++]);
+
+  if (argc != optind)
+    usage(argv[0], 1);
 
   if (ncp_init (NULL) == -1) {
     fprintf (stderr, "NCP initialization error: %s.\n", strerror (errno));
@@ -540,10 +553,11 @@ int main (int argc, char **argv)
     exit (1);
   }
 
-  if (client)
-    telnet_client (host, sock, process, client_options);
-  else if (server)
-    telnet_server (sock, process, server_options);
+  if (telnet == telnet_client)
+    options = client_options;
+  else
+    options = server_options;
+  telnet (host, sock, process, options);
 
   return 0;
 }
