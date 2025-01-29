@@ -208,3 +208,20 @@ int ncp_close (int connection)
     return -1;
   return 0;
 }
+
+int ncp_unlisten (unsigned socket)
+{
+  type (WIRE_UNLISTEN);
+  add (socket >> 24);
+  add (socket >> 16);
+  add (socket >> 8);
+  add (socket);
+  if (transact () == -1)
+    return -1;
+  if (u32 (message + 1) != socket)
+    return -1;
+  if (message[5] == 0)
+    return 0;
+  else
+    return -1;
+}
