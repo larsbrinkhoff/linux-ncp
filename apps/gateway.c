@@ -183,8 +183,11 @@ static void ncp_to_tcp (int sock, const char *host, const char *port)
   fd = inet_connect (host, port);
   transport (fd, connection);
 
-  if (ncp_close (connection) == -1) {
+  if (ncp_close (connection) == -1)
     fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
     exit (1);
   }
 }

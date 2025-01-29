@@ -79,14 +79,23 @@ static void echo_server (int sock)
     if (ncp_read (connection, buffer, &size) == -1)
       fprintf (stderr, "NCP read error.\n");
     if (size <= 0)
-      return;
+      goto end;
     for (ptr = buffer; size > 0; ptr += n, size -= n) {
       n = size;
       if (ncp_write (connection, ptr, &n) == -1)
         fprintf (stderr, "NCP read error.\n");
       if (n <= 0)
-        return;
+        goto end;
     }
+  }
+
+ end:
+  if (n == 0 && ncp_close (connection) == -1)
+    fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
+    exit (1);
   }
 }
 

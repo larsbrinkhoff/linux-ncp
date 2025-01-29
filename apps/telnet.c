@@ -456,8 +456,11 @@ static void telnet_server (int host, int sock,
   kill (reader_pid, SIGTERM);
   kill (writer_pid, SIGTERM);
 
-  if (ncp_close (connection) == -1) {
+  if (ncp_close (connection) == -1)
     fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
     exit (1);
   }
 }

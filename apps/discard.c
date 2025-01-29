@@ -25,8 +25,16 @@ static void discard_server (int sock)
     if (ncp_read (connection, buffer, &size) == -1)
       fprintf (stderr, "NCP read error.\n");
     if (size <= 0)
-      return;
+      break;
     fprintf (stderr, "Read %d octets.\n", size);
+  }
+
+  if (size == 0 && ncp_close (connection) == -1)
+    fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
+    exit (1);
   }
 }
 
