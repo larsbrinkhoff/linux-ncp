@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -52,6 +53,9 @@ int ncp_init (const char *path)
   server.sun_family = AF_UNIX;
   if (path == NULL)
     path = getenv ("NCP");
+  errno = EFAULT;
+  if (path == NULL)
+    return -1;
   strncpy (server.sun_path, path, sizeof server.sun_path - 1);
   if (connect (fd, (struct sockaddr *) &server, sizeof server) == -1)
     return -1;

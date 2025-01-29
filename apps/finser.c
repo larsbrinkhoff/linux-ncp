@@ -20,6 +20,8 @@ int main (int argc, char **argv)
     fprintf (stderr, "NCP initialization error: %s.\n", strerror (errno));
     if (errno == ECONNREFUSED)
       fprintf (stderr, "Is the NCP server started?\n");
+    else if (errno == EFAULT)
+      fprintf (stderr, "Is the NCP environment variable set?\n");
     exit (1);
   }
 
