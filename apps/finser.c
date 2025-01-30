@@ -27,11 +27,14 @@ int main (int argc, char **argv)
     exit (1);
   }
 
+  fprintf (stderr, "Listening to socket %d.\n", SOCKET);
+
   size = 8;
   if (ncp_listen (SOCKET, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }
+  fprintf (stderr, "Connection from host %03o.\n", host);
 
   size = sizeof command;
   if (ncp_read (connection, command, &size) == -1) {
