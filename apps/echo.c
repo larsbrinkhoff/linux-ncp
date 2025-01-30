@@ -75,6 +75,8 @@ static void echo_server (int sock)
   int host, connection, size, n;
   char buffer[1000], *ptr;
 
+  fprintf (stderr, "Listening to socket %d.\n", sock);
+
   size = 8;
   if (ncp_listen (sock, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");

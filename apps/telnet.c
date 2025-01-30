@@ -400,6 +400,7 @@ static void telnet_server (int host, int sock,
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }
+  fprintf (stderr, "Connection from host %03o.\n", host);
 
   reader_fd = reader (connection);
   writer_fd = writer (connection);
