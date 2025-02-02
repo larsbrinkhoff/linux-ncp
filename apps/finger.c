@@ -46,14 +46,24 @@ int main (int argc, char **argv)
                    argc == 3 ? argv[2] : "");
   if (ncp_write (connection, command, &size) == -1) {
     fprintf (stderr, "NCP write error.\n");
+    if (ncp_close (connection) == -1)
+      fprintf (stderr, "NCP close error.\n");
+    exit (1);
+  }
+  if (size == 0) {
+    fprintf (stderr, "Connection closed.\n");
     exit (1);
   }
 
   size = sizeof reply;
   if (ncp_read (connection, reply, &size) == -1) {
     fprintf (stderr, "NCP read error.\n");
+    if (ncp_close (connection) == -1)
+      fprintf (stderr, "NCP close error.\n");
     exit (1);
   }
+  if (size == 0)
+    exit (0);
 
   write (1, reply, size);
 

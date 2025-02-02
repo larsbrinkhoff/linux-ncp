@@ -29,36 +29,44 @@ static void echo_client (int host, int sock)
 
   for (;;) {
     size = read (0, buffer, sizeof buffer);
-    if (size == -1)
+    if (size < 0)
       fprintf (stderr, "Read error.\n");
-    if (size <= 0)
-      goto end;
+    if (size <= 0) {
+      if (ncp_close (connection) == -1)
+        fprintf (stderr, "NCP close error.\n");
+      return;
+    }
     for (ptr = buffer; size > 0; ptr += n, size -= n) {
       n = size;
-      if (ncp_write (connection, ptr, &n) == -1)
+      if (ncp_write (connection, ptr, &n) == -1) {
         fprintf (stderr, "NCP read error.\n");
-      if (n <= 0)
-        goto end;
+        if (ncp_close (connection) == -1)
+          fprintf (stderr, "NCP close error.\n");
+        return;
+      }
+      if (n == 0)
+        return;
     }
 
     n = sizeof buffer;
-    if (ncp_read (connection, buffer, &n) == -1)
+    if (ncp_read (connection, buffer, &n) == -1) {
       fprintf (stderr, "NCP read error.\n");
-    if (n <= 0)
-      goto end;
+      if (ncp_close (connection) == -1)
+        fprintf (stderr, "NCP close error.\n");
+      return;
+    }
+    if (n == 0)
+      return;
     for (ptr = buffer; n > 0; n -= size) {
       size = write (1, ptr, n);
-      if (size < 0)
+      if (size < 0) {
         fprintf (stderr, "Write error.\n");
+        if (ncp_close (connection) == -1)
+          fprintf (stderr, "NCP close error.\n");
+      }
       if (size <= 0)
-        goto end;
+        return;
     }
-  }
-
- end:
-  if (ncp_close (connection) == -1) {
-    fprintf (stderr, "NCP close error.\n");
-    exit (1);
   }
 }
 
@@ -66,6 +74,8 @@ static void echo_server (int sock)
 {
   int host, connection, size, n;
   char buffer[1000], *ptr;
+
+  fprintf (stderr, "Listening to socket %d.\n", sock);
 
   size = 8;
   if (ncp_listen (sock, &size, &host, &connection) == -1) {
@@ -76,17 +86,31 @@ static void echo_server (int sock)
 
   for (;;) {
     size = sizeof buffer;
-    if (ncp_read (connection, buffer, &size) == -1)
+    if (ncp_read (connection, buffer, &size) == -1) {
       fprintf (stderr, "NCP read error.\n");
-    if (size <= 0)
-      return;
+      if (ncp_close (connection) == -1)
+        fprintf (stderr, "NCP close error.\n");
+      goto end;
+    }
+    if (size == 0)
+      goto end;
     for (ptr = buffer; size > 0; ptr += n, size -= n) {
       n = size;
-      if (ncp_write (connection, ptr, &n) == -1)
+      if (ncp_write (connection, ptr, &n) == -1) {
         fprintf (stderr, "NCP read error.\n");
-      if (n <= 0)
-        return;
+        if (ncp_close (connection) == -1)
+          fprintf (stderr, "NCP close error.\n");
+        goto end;
+      }
+      if (n == 0)
+        goto end;
     }
+  }
+
+ end:
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
+    exit (1);
   }
 }
 

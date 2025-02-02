@@ -7,6 +7,7 @@
 #define WIRE_WRITE       9
 #define WIRE_INTERRUPT  11
 #define WIRE_CLOSE      13
+#define WIRE_UNLISTEN   15
 
 static int wire_check (int type, int size)
 {
@@ -25,6 +26,8 @@ static int wire_check (int type, int size)
   case WIRE_INTERRUPT+1: return size == 2;
   case WIRE_CLOSE:       return size == 2;
   case WIRE_CLOSE+1:     return size == 2;
+  case WIRE_UNLISTEN:    return size == 5;
+  case WIRE_UNLISTEN+1:  return size == 6;
   default:               return 0;
   }
 }
