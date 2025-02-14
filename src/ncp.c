@@ -19,7 +19,7 @@
 #define RRP_TIMEOUT    20
 #define ERP_TIMEOUT    20
 #define ALL_TIMEOUT    60
-#define RFC_TIMEOUT     3
+#define RFC_TIMEOUT    15
 #define CLS_TIMEOUT     3
 
 #define IMP_REGULAR       0
