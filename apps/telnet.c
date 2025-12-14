@@ -7,6 +7,7 @@
 #include <getopt.h>
 #include <signal.h>
 #include "ncp.h"
+#include <sys/wait.h>
 #include "tty.h"
 
 #define OLD_TELNET    1
@@ -239,11 +240,11 @@ static int reader (int connection)
   unsigned char data[200];
   int fds[2];
   int size;
-  ssize_t n;
-
+  ssize_t n = 0;
   if (pipe (fds) == -1)
     exit (1);
-
+  fcntl (fds[0], F_SETFD, FD_CLOEXEC);
+  fcntl (fds[1], F_SETFD, FD_CLOEXEC);
   reader_pid = fork();
   if (reader_pid) {
     close (fds[1]);
@@ -263,10 +264,14 @@ static int reader (int connection)
     if (size == 0)
       exit (0);
     n = write (fds[1], data, size);
-    if (n == 0)
-      exit (0);
-    if (n < 0)
+    if (n <= 0) {
+      if (n < 0 && errno == EPIPE) {
+        fprintf (stderr, "DEBUG: reader child exiting cleanly on EPIPE.\n");
+        exit (0);
+      }
+      fprintf (stderr, "DEBUG: reader child exiting on write error or EOF.\n");
       exit (1);
+    }
   }
 }
 
@@ -279,6 +284,8 @@ static int writer (int connection)
 
   if (pipe (fds) == -1)
     exit (1);
+  fcntl (fds[0], F_SETFD, FD_CLOEXEC);
+  fcntl (fds[1], F_SETFD, FD_CLOEXEC);
 
   writer_pid = fork();
   if (writer_pid) {
@@ -375,14 +382,29 @@ static void telnet_client (int host, int sock,
  quit:
   printf ("TELNET> quit\r\n");
  end:
+  fprintf (stderr, "DEBUG: client shutting down.\n");
   tty_restore ();
+
+  fprintf (stderr, "DEBUG: signaling reader child (PID %d) to unblock from ncp_read.\n", reader_pid);
   kill (reader_pid, SIGTERM);
-  kill (writer_pid, SIGTERM);
+
+  fprintf (stderr, "DEBUG: closing pipes to children.\n");
+  close (reader_fd);
+  close (writer_fd);
+
+  fprintf (stderr, "DEBUG: waiting for reader child (PID %d).\n", reader_pid);
+  waitpid (reader_pid, NULL, 0);
+  fprintf (stderr, "DEBUG: reader child reaped.\n");
+
+  fprintf (stderr, "DEBUG: waiting for writer child (PID %d).\n", writer_pid);
+  waitpid (writer_pid, NULL, 0);
+  fprintf (stderr, "DEBUG: writer child reaped.\n");
 
   if (ncp_close (connection) == -1) {
     fprintf (stderr, "NCP close error.\n");
     exit (1);
   }
+  fprintf (stderr, "DEBUG: client shutdown complete.\n");
 }
 
 static void telnet_server (int host, int sock,
@@ -392,6 +414,8 @@ static void telnet_server (int host, int sock,
   int connection, size;
   int reader_fd, writer_fd;
   char *banner;
+  pid_t shell_pid;
+  int fd;
 
   fprintf (stderr, "Listening to socket %d.\n", sock);
 
@@ -418,7 +442,7 @@ static void telnet_server (int host, int sock,
   }
 
   char *cmd[] = { "sh", NULL };
-  int fd = tty_run (cmd);
+  shell_pid = tty_run (cmd, &fd);
 
   int flags = fcntl (fd, F_GETFL);
   fcntl (fd, F_SETFL, flags | O_NONBLOCK);
@@ -433,7 +457,7 @@ static void telnet_server (int host, int sock,
     FD_SET (reader_fd, &rfds);
     n = select (n + 1, &rfds, NULL, NULL, NULL);
     if (n <= 0)
-      break;
+      goto end;
 
     if (FD_ISSET (fd, &rfds)) {
       unsigned char data[200];
@@ -453,13 +477,30 @@ static void telnet_server (int host, int sock,
   }
 
  end:
-  kill (reader_pid, SIGTERM);
-  kill (writer_pid, SIGTERM);
+  fprintf (stderr, "DEBUG: server shutting down.\n");
+
+  fprintf (stderr, "DEBUG: closing pipes to children.\n");
+  close (reader_fd);
+  close (writer_fd);
+
+  fprintf (stderr, "DEBUG: waiting for reader child (PID %d).\n", reader_pid);
+  waitpid (reader_pid, NULL, 0);
+  fprintf (stderr, "DEBUG: reader child reaped.\n");
+
+  fprintf (stderr, "DEBUG: waiting for writer child (PID %d).\n", writer_pid);
+  waitpid (writer_pid, NULL, 0);
+  fprintf (stderr, "DEBUG: writer child reaped.\n");
+
+  fprintf (stderr, "DEBUG: terminating shell process group (PID %d).\n", shell_pid);
+  killpg (shell_pid, SIGHUP);
+  waitpid (shell_pid, NULL, 0);
+  fprintf (stderr, "DEBUG: shell process reaped.\n");
 
   if (ncp_close (connection) == -1) {
     fprintf (stderr, "NCP close error.\n");
     exit (1);
   }
+  fprintf (stderr, "DEBUG: server shutdown complete.\n");
 }
 
 static void usage (const char *argv0, int code)

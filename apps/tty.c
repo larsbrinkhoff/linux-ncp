@@ -30,17 +30,21 @@ void tty_raw (void)
   tcsetattr (0, TCSAFLUSH, &new);
 }
 
-int tty_run (char **cmd)
+pid_t tty_run (char **cmd, int *master_fd)
 {
   int fd = posix_openpt (O_RDWR);
+  pid_t pid;
   if (fd < 0 ||
       grantpt (fd) < 0 ||
       unlockpt (fd) < 0) {
     exit (1);
   }
 
-  if (fork ())
-    return fd;
+  pid = fork ();
+  if (pid) {
+    *master_fd = fd;
+    return pid;
+  }
 
   close (0);
   close (1);
