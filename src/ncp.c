@@ -1786,6 +1786,7 @@ static void cleanup (void)
 static void sigcleanup (int sig)
 {
   cleanup ();
+  exit (0);
 }
 
 void ncp_init (void)
