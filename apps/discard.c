@@ -13,6 +13,8 @@ static void discard_server (int sock)
   int host, connection, size;
   char buffer[1000];
 
+  fprintf (stderr, "Listening to socket %d.\n", sock);
+
   size = 8;
   if (ncp_listen (sock, &size, &host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
@@ -22,11 +24,20 @@ static void discard_server (int sock)
 
   for (;;) {
     size = sizeof buffer;
-    if (ncp_read (connection, buffer, &size) == -1)
+    if (ncp_read (connection, buffer, &size) == -1) {
       fprintf (stderr, "NCP read error.\n");
-    if (size <= 0)
-      return;
+      if (ncp_close (connection) == -1)
+        fprintf (stderr, "NCP close error.\n");
+      break;
+    }
+    if (size == 0)
+      break;
     fprintf (stderr, "Read %d octets.\n", size);
+  }
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
+    exit (1);
   }
 }
 

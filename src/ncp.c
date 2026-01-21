@@ -638,6 +638,22 @@ static void reply_close (uint8_t i)
              client.sun_path, strerror (errno));
 }
 
+static void reply_unlisten (uint32_t socket, uint8_t e)
+{
+  uint8_t reply[6];
+  fprintf (stderr, "NCP: Application unlisten reply socket %u: %u\n",
+           socket, e);
+  reply[0] = WIRE_UNLISTEN+1;
+  reply[1] = socket >> 24;
+  reply[2] = socket >> 16;
+  reply[3] = socket >> 8;
+  reply[4] = socket;
+  reply[5] = e;
+  if (sendto (fd, reply, sizeof reply, 0, (struct sockaddr *)&client, len) == -1)
+    fprintf (stderr, "NCP: sendto %s error: %s.\n",
+             client.sun_path, strerror (errno));
+}
+
 static void maybe_reply (int i)
 {
   if ((connection[i].flags & CONN_GOT_BOTH) == CONN_GOT_BOTH) {
@@ -1697,6 +1713,22 @@ static void app_close (void)
   unless_cls (i, cls_timeout);
 }
 
+static void app_unlisten (void)
+{
+  uint32_t socket;
+  int i;
+
+  socket = app[1] << 24 | app[2] << 16 | app[3] << 8 | app[4];
+  fprintf (stderr, "NCP: Application unlisten to socket %u\n", socket);
+  if ((i = find_listen (socket)) != -1) {
+    listening[i].sock = 0;
+    reply_unlisten (socket, 0);
+  } else {
+    fprintf (stderr, "NCP: Not listening to %u.\n", socket);
+    reply_unlisten (socket, 1);
+  }
+}
+
 static void application (void)
 {
   ssize_t n;
@@ -1724,6 +1756,7 @@ static void application (void)
   case WIRE_WRITE:      app_write (n - 2); break;
   case WIRE_INTERRUPT:  app_interrupt (); break;
   case WIRE_CLOSE:      app_close (); break;
+  case WIRE_UNLISTEN:   app_unlisten (); break;
   default:              fprintf (stderr, "NCP: bad application request.\n"); break;
   }
 }

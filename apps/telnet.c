@@ -424,6 +424,7 @@ static void telnet_server (int host, int sock,
     fprintf (stderr, "NCP listen error.\n");
     exit (1);
   }
+  fprintf (stderr, "Connection from host %03o.\n", host);
 
   reader_fd = reader (connection);
   writer_fd = writer (connection);
@@ -496,8 +497,11 @@ static void telnet_server (int host, int sock,
   waitpid (shell_pid, NULL, 0);
   fprintf (stderr, "DEBUG: shell process reaped.\n");
 
-  if (ncp_close (connection) == -1) {
+  if (ncp_close (connection) == -1)
     fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
     exit (1);
   }
   fprintf (stderr, "DEBUG: server shutdown complete.\n");

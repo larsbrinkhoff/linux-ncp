@@ -140,6 +140,8 @@ static void tcp_to_ncp (const char *port, const char *host, const char *sock)
   int connection, foreign_port;
   int fd, s, size;
 
+  fprintf (stderr, "Listening to port %s.\n", port);
+
   s = inet_server (port);
   fd = inet_accept (s, &foreign_host, &foreign_port);
   fprintf (stderr, "Connection from host %s on port %d.\n",
@@ -161,6 +163,7 @@ static void tcp_to_ncp (const char *port, const char *host, const char *sock)
     exit (1);
   }
 
+  fprintf (stderr, "Forwarding to host %d socket %d.\n", ncp_host, ncp_sock);
   transport (fd, connection);
 
   if (ncp_close (connection) == -1) {
@@ -173,6 +176,8 @@ static void ncp_to_tcp (int sock, const char *host, const char *port)
 {
   int fd, ncp_host, connection, size;
 
+  fprintf (stderr, "Listening to socket %d.\n", sock);
+
   size = 8;
   if (ncp_listen (sock, &size, &ncp_host, &connection) == -1) {
     fprintf (stderr, "NCP listen error.\n");
@@ -181,10 +186,14 @@ static void ncp_to_tcp (int sock, const char *host, const char *port)
   fprintf (stderr, "Connection from host %03o on socket %d.\n", ncp_host, sock);
 
   fd = inet_connect (host, port);
+  fprintf (stderr, "Forwarding to host %s port %s.\n", host, port);
   transport (fd, connection);
 
-  if (ncp_close (connection) == -1) {
+  if (ncp_close (connection) == -1)
     fprintf (stderr, "NCP close error.\n");
+
+  if (ncp_unlisten (sock) == -1) {
+    fprintf (stderr, "NCP unlisten error.\n");
     exit (1);
   }
 }
